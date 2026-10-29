@@ -6,7 +6,7 @@
 
 **See at a glance which of your Claude Code agents is working right now.**
 
-[![Latest release](https://img.shields.io/github/v/release/FabienPENCHENAT/agent-office?label=release&color=4fb06a)](../../releases/latest)
+[![Latest release](https://img.shields.io/github/v/release/FabienPENCHENAT/agent-office?label=release&color=4fb06a&cacheSeconds=3600)](../../releases/latest)
 [![MIT License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 ![VS Code 1.90+](https://img.shields.io/badge/VS%20Code-1.90%2B-007ACC?logo=visualstudiocode&logoColor=white)
 ![100% local](https://img.shields.io/badge/data-100%25%20local-8a93a6)
