@@ -138,8 +138,8 @@ npm run compile
 - **In development**: open the folder in VS Code, then press `F5` (“Run Extension”).
 - **As a VSIX**:
   ```bash
-  npm run package          # builds agent-office-0.5.0.vsix
-  code --install-extension agent-office-0.5.0.vsix
+  npm run package          # builds agent-office-1.0.0.vsix
+  code --install-extension agent-office-1.0.0.vsix
   ```
   You can also use the Command Palette: *Extensions: Install from VSIX…*
 

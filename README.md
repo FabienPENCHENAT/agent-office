@@ -1,6 +1,8 @@
 <div align="center">
 
-# 🏢 Agent Office
+<img src="media/extension-icon.png" alt="Agent Office logo" width="128">
+
+# Agent Office
 
 **See at a glance which of your Claude Code agents is working right now.**
 
@@ -34,7 +36,7 @@ The easiest way: **drag the `.vsix` file onto the Extensions sidebar** in VS Cod
 - **From the menu**: open the Command Palette (`Cmd+Shift+P` on Mac, `Ctrl+Shift+P` on Windows/Linux), type **`Install from VSIX`**, then pick the file.
 - **From a terminal**:
   ```bash
-  code --install-extension agent-office-0.5.0.vsix
+  code --install-extension agent-office-1.0.0.vsix
   ```
 
 </details>
@@ -172,7 +174,7 @@ You need Node.js 18+ and VS Code 1.90+.
 ```bash
 npm install
 npm test          # checks that everything works
-npm run package   # builds agent-office-0.5.0.vsix
+npm run package   # builds agent-office-1.0.0.vsix
 ```
 
 To try it without installing: open the folder in VS Code and press `F5`.
