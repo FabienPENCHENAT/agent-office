@@ -6,34 +6,36 @@
 
 **See at a glance which of your Claude Code agents is working right now.**
 
-A tiny pixel-art office inside VS Code where your AI agents work at their desks, meet up, hand in their work… and nap in the hammock when there's nothing to do.
+[![Latest release](https://img.shields.io/github/v/release/FabienPENCHENAT/agent-office?label=release&color=4fb06a)](../../releases/latest)
+[![MIT License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+![VS Code 1.90+](https://img.shields.io/badge/VS%20Code-1.90%2B-007ACC?logo=visualstudiocode&logoColor=white)
+![100% local](https://img.shields.io/badge/data-100%25%20local-8a93a6)
+
+[Getting started](#getting-started) · [How it works](#how-it-works) · [Settings](#settings) · [FAQ](#faq) · [Technical docs](docs/TECHNICAL.md)
 
 <img src="docs/images/office.gif" alt="The pixel-art office: agents at their desks with a “working” bubble, others in a meeting, others by the pond" width="736">
 
-![VS Code](https://img.shields.io/badge/VS%20Code-1.90%2B-007ACC?logo=visualstudiocode&logoColor=white)
-![Claude Code](https://img.shields.io/badge/Claude%20Code-agents-D97757)
-![100% local](https://img.shields.io/badge/data-100%25%20local-4fb06a)
-![MIT License](https://img.shields.io/badge/license-MIT-blue)
-
 </div>
 
----
+A tiny pixel-art office inside VS Code. When one of your Claude Code agents starts working, its character walks to its desk. When an agent delegates, the others gather in a meeting room. When a job is done, the result is brought back to whoever asked for it. And when there's nothing to do, everyone heads to the pond or the hammock.
 
-## ✋ Before you start: you need custom agents
+## Features
+
+- **Live status**: see which agent is working, idle or in an unknown state, refreshed every 2 seconds.
+- **Real delegations**: visits, meetings and hand-ins are triggered by what your agents actually do.
+- **Zero setup**: agents, desks and colors are detected automatically.
+- **Private by design**: 100% local and read-only. No code, prompt or conversation is ever displayed.
+
+## Getting started
+
+### 1. Make sure you have custom agents
 
 > [!IMPORTANT]
 > **Agent Office shows your Claude Code _custom agents_. No custom agents, nobody in the office.**
 >
-> You need:
-> - [Claude Code](https://docs.claude.com/en/docs/claude-code/overview) installed;
-> - at least one custom agent: a `.md` file in `~/.claude/agents/` (for all your projects) or in your project's `.claude/agents/` folder.
+> A custom agent is a `.md` file in `~/.claude/agents/` (for all your projects) or in your project's `.claude/agents/` folder. You can create them with the `/agents` command in [Claude Code](https://docs.claude.com/en/docs/claude-code/overview).
 
-**Already have agents?** Skip to the [install](#-install-in-3-steps).
-
-**No agents yet?** You have two options:
-
-- create them one by one with the **`/agents`** command in Claude Code;
-- or create a **complete development team in one go**: open Claude Code, paste the prompt below and let it work. It's the team you see in the animation above.
+**No agents yet?** Paste the prompt below into Claude Code. It creates a complete development team of 9 agents, like the one in the animation, with one simple rule: you only talk to the product manager, and no code changes without your explicit “GO”.
 
 <details>
 <summary><b>📋 Prompt: create a complete development team (9 agents)</b></summary>
@@ -126,101 +128,90 @@ working with the team.
 
 </details>
 
-Once the team exists, start Claude Code with **`claude --agent product-manager`** and tell it what you want to build. The product manager delegates to the others, and the office comes alive.
+### 2. Install the extension
 
----
-
-## ⚡ Install in 3 steps
-
-> 🕐 About one minute. No account, no key, no setup.
-
-### 1. Download the extension
-
-Go to [**Releases**](../../releases/latest) and download the **`agent-office-x.y.z.vsix`** file (under *Assets*).
-
-### 2. Install it in VS Code
-
-The easiest way: **drag the `.vsix` file onto the Extensions sidebar** in VS Code.
+1. Download **`agent-office-x.y.z.vsix`** from the [latest release](../../releases/latest) (under *Assets*).
+2. In VS Code, open the **Extensions** view, click the **`···`** menu at the top, choose **Install from VSIX…** and pick the file.
+3. Click the **Agent Office** tab at the bottom of VS Code, next to *Terminal*. 🎉
 
 <details>
-<summary>Didn't work? Two other ways</summary>
+<summary>Prefer the terminal?</summary>
 
-- **From the menu**: open the Command Palette (`Cmd+Shift+P` on Mac, `Ctrl+Shift+P` on Windows/Linux), type **`Install from VSIX`**, then pick the file.
-- **From a terminal**:
-  ```bash
-  code --install-extension agent-office-1.0.0.vsix
-  ```
+```bash
+code --install-extension ~/Downloads/agent-office-*.vsix
+```
 
 </details>
 
-### 3. Open the office
+### 3. Put your agents to work
 
-At the bottom of VS Code, next to the *Terminal* tab, click the **Agent Office** tab. 🎉
+Start Claude Code with one of your agents, for example:
 
-> 💡 Can't see it? Command Palette → **`Agent Office: Show the agent office`**.
+```bash
+claude --agent product-manager
+```
 
----
+Ask it for something. As soon as it starts, its character walks to its desk with a 💻 bubble, and the status bar at the bottom of VS Code reads *“Active agent: product-manager”*.
 
-## 🪄 Everything is automatic
+> [!TIP]
+> Talking to Claude directly, without `--agent`, doesn't light up any desk for Claude itself. Only the custom agents it launches as subagents show up.
 
-There's nothing to configure. On startup, the extension:
+## How it works
 
-1. **finds your agents** in `~/.claude/agents/` (your personal agents) and in the `.claude/agents/` folder of the open project;
-2. **gives each one a desk**, based on its name:
+Everything is automatic. The extension:
 
-   | If the name contains… | It sits… |
+1. **finds your agents** in `~/.claude/agents/` and in the open project's `.claude/agents/`, and shows up to 10 of them;
+2. **gives each one a desk** based on its name, or its description when the name says nothing about the role:
+
+   | Name or description mentions… | Desk |
    |---|---|
-   | `product-manager`, `pm`, `product-owner` | in the product manager's office |
-   | `challenger` | in the challenger's office |
-   | `ux`, `ui`, `design` | in the UX/UI office |
-   | anything else | in the engineering open space |
+   | product manager, product owner | Product manager's office |
+   | challenger | Challenger's office |
+   | UX, UI, design | UX/UI office |
+   | anything else | Engineering open space |
 
-   If the name says nothing about the role (`alice`, `helper`…), the extension reads the agent's **description** instead. For example, an agent described as a *product owner* still gets the product manager's office.
-3. **gives each one a color**: the `color:` set in the agent's file, or else a color no other agent is using;
-4. **follows Claude Code live**, every 2 seconds: who's working, who's delegating to whom, who's done.
+3. **gives each one a color**: the `color:` from the agent's file, or else one no other agent is using;
+4. **reads Claude Code's local activity files** every 2 seconds to know who's working and who delegates to whom.
 
-Add a new agent and it shows up on its own. The office has room for **10 agents**.
+Above each character, a bubble tells you what's going on:
 
-> ℹ️ **Good to know**: the extension needs **custom agents** (see [Before you start](#-before-you-start-you-need-custom-agents)). If you talk to Claude directly, without `claude --agent <name>`, no desk lights up. Only the subagents it launches do.
-
----
-
-## 👀 What you'll see
-
-| Bubble | What the agent is doing |
+| Bubble | Meaning |
 |:---:|---|
-| 💻 | **Working.** The bubble shows up as soon as the agent starts, even while it walks to its desk. |
-| 👥 | **Heading to a meeting.** An agent that delegates to several others at once gathers them in a meeting room. |
-| 📄 | **Handing in its work.** When it's done, it brings the result to whoever asked for it. |
-| ✅ | **Work accepted.** The agent that delegated acknowledges it. |
-| 💤 ☕ | **Free.** It wanders around, chats by the pond or naps in the hammock. |
-| ❓ | **Unknown status.** The character turns grey: the extension can't tell what it's doing. |
+| 💻 | **Working**, from the moment it starts, even while walking to its desk |
+| 👥 | **In a meeting**: an agent delegated to several others at once |
+| 📄 | **Handing in its work** to the agent that asked for it |
+| ✅ | **Work accepted** by the agent that delegated |
+| 💤 ☕ | **Free**: wandering, chatting by the pond, napping in the hammock |
+| ❓ | **Unknown**: the character turns grey, its status can't be determined |
 
-The VS Code status bar (at the bottom) also spells out who's working: *“Active agent: tech-lead”*.
+## Settings
 
----
+Everything works out of the box. To customize, open VS Code Settings and search for **Agent Office**.
 
-## ⚙️ Settings (optional)
+| Setting | Default | What it does |
+|---|---|---|
+| `agentOffice.agentRooms` | `{}` | Force an agent's desk, e.g. `{ "my-agent": "design" }` (`pm`, `challenger`, `design` or `engineering`) |
+| `agentOffice.pinnedAgents` | `[]` | Agents shown first when you have more than 10 |
+| `agentOffice.pollIntervalSeconds` | `2` | Refresh interval, in seconds |
 
-Everything works out of the box. To customize: **VS Code Settings → search for “Agent Office”**.
+Two more advanced settings are described in the [technical docs](docs/TECHNICAL.md#signal-sources-claude-code).
 
-| Setting | What it does |
-|---|---|
-| `agentOffice.agentRooms` | Force an agent's office. Example: `{ "my-agent": "design" }` |
-| `agentOffice.pinnedAgents` | Choose which agents come first when you have more than 10 |
-| `agentOffice.pollIntervalSeconds` | How often the office refreshes (2 seconds by default) |
+## Privacy
 
----
+- **100% local**: the extension makes no network request.
+- **Read-only**: it never changes a file and never starts or controls an agent.
+- **Nothing of your work is shown**: only agent names, statuses and timestamps reach the office view.
 
-## 🔒 Privacy
+## Known limitations
 
-- **100% local**: no network connection, nothing is sent anywhere.
-- **Read-only**: the extension never changes a file and never controls an agent.
-- **None of your work is shown**: no code, no conversation, no prompt. Only the agents' names and status.
+- **Claude Code only.** GitHub Copilot agents are listed but stay grey: Copilot exposes no activity signal.
+- **Relies on Claude Code internals.** Activity is read from local files that Claude Code doesn't officially document. A Claude Code update may break detection; the office then shows “Unknown status” rather than guessing.
+- **Tested on macOS.** Linux and Windows should work but haven't been tested yet: feedback welcome.
+- **10 agents max** in the office. Extra agents are listed below it.
 
----
+More details in the [technical docs](docs/TECHNICAL.md#limits).
 
-## ❓ FAQ
+## FAQ
 
 <details>
 <summary><b>My agents have random names and no colors. Can I tidy them up in one go?</b></summary>
@@ -247,59 +238,43 @@ Look at all my Claude Code agents: the .md files in ~/.claude/agents/ and in
 3. Show me a table: agent → color → room.
 ```
 
-The office updates within a couple of seconds. Your agents keep their names, so nothing changes in how you call them.
+Your agents keep their names, so nothing changes in how you call them.
 </details>
 
 <details>
-<summary><b>My agents stay idle even though they're working</b></summary>
+<summary><b>My agent is working but its desk stays empty</b></summary>
 
-Make sure you start Claude Code with an agent (for example `claude --agent product-manager`), or that your agent delegates to subagents. A direct conversation with Claude, without an agent, doesn't light up any desk.
+Check that Claude Code was started with that agent (`claude --agent <name>`), or that the agent was launched as a subagent. Also check that its `.md` file is in `~/.claude/agents/` or in the `.claude/agents/` folder of the project open in VS Code.
 </details>
 
 <details>
-<summary><b>Does it work with GitHub Copilot?</b></summary>
+<summary><b>Can I have fewer animations?</b></summary>
 
-Copilot agents are found and shown, but greyed out: Copilot doesn't expose their activity. Only Claude Code is supported for now.
+Yes: the office follows VS Code's `workbench.reduceMotion` setting. When it's on, the scene stays still.
 </details>
 
 <details>
-<summary><b>I'd like fewer animations</b></summary>
+<summary><b>How do I update or uninstall?</b></summary>
 
-The extension follows VS Code's `workbench.reduceMotion` setting: when it's on, the scene stays still.
+To update, install the new `.vsix` from the [latest release](../../releases/latest) over the old one. To uninstall, find **Agent Office** in the Extensions view and click **Uninstall**.
 </details>
 
-<details>
-<summary><b>How do I update?</b></summary>
+## Contributing
 
-Download the new `.vsix` from [Releases](../../releases/latest) and install it over the old one, the same way.
-</details>
+Bug reports and ideas are welcome in the [issues](../../issues).
 
----
-
-## 🛠️ For the curious
-
-<details>
-<summary>Build the extension yourself</summary>
-
-You need Node.js 18+ and VS Code 1.90+.
+To build from source, you need Node.js 18+:
 
 ```bash
 npm install
-npm test          # checks that everything works
-npm run package   # builds agent-office-1.0.0.vsix
+npm test          # runs the test suite
+npm run package   # builds the .vsix
 ```
 
-To try it without installing: open the folder in VS Code and press `F5`.
-</details>
+Press `F5` in VS Code to try your changes in a new window. The [technical docs](docs/TECHNICAL.md) explain the architecture and every rule the office follows.
 
-How it all works under the hood (signals read, placement rules, accessibility, limits) is covered in the [technical documentation](docs/TECHNICAL.md).
-
-<div align="center">
-
----
+## Credits and license
 
 Inspired by [Pixel Agents](https://github.com/pixel-agents-hq/pixel-agents). The code, the sprites (drawn in code) and the office layout are original.
 
 Released under the [MIT License](LICENSE).
-
-</div>
