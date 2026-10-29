@@ -19,6 +19,117 @@ A tiny pixel-art office inside VS Code where your AI agents work at their desks,
 
 ---
 
+## ✋ Before you start: you need custom agents
+
+> [!IMPORTANT]
+> **Agent Office shows your Claude Code _custom agents_. No custom agents, nobody in the office.**
+>
+> You need:
+> - [Claude Code](https://docs.claude.com/en/docs/claude-code/overview) installed;
+> - at least one custom agent: a `.md` file in `~/.claude/agents/` (for all your projects) or in your project's `.claude/agents/` folder.
+
+**Already have agents?** Skip to the [install](#-install-in-3-steps).
+
+**No agents yet?** You have two options:
+
+- create them one by one with the **`/agents`** command in Claude Code;
+- or create a **complete development team in one go**: open Claude Code, paste the prompt below and let it work. It's the team you see in the animation above.
+
+<details>
+<summary><b>📋 Prompt: create a complete development team (9 agents)</b></summary>
+
+```text
+Create a team of 9 Claude Code custom agents for software development, as
+Markdown files in ~/.claude/agents/ (create the folder if needed). If a file
+with the same name already exists, show it to me and ask before overwriting.
+
+Each file starts with a YAML frontmatter containing: name, description (one
+or two sentences saying when to use the agent), tools, model: inherit, and
+color. Below the frontmatter, write a complete system prompt in the second
+person ("You are the..."): role, responsibilities, how it works step by step,
+what it must never do, and the format of its answer. Every agent reads the
+project's CLAUDE.md first and follows its rules.
+
+The team works around one rule: the product manager is my only contact, and
+no code changes without my explicit "GO". Pushing, merging or deploying needs
+a second, separate confirmation from me.
+
+1. product-manager (color: purple)
+   My single point of contact. Clarifies each request (need, users, acceptance
+   criteria), then delegates to the smallest useful set of agents with the
+   Agent tool, never playing their role itself. For any new feature, asks the
+   product-challenger first. Consolidates their opinions into one short report
+   with a recommendation, then waits for my "GO" before any implementation.
+   Writes self-contained briefs (scope, out of scope, files to read, expected
+   answer). Never edits files itself.
+   tools: Agent(product-challenger, ux-ui-designer, tech-lead,
+   developer-frontend, developer-backend, qa-engineer,
+   documentation-engineer, administrator), Read, Grep, Glob, Bash,
+   AskUserQuestion
+
+2. product-challenger (color: orange)
+   Framing partner of the product manager, consulted early for each feature.
+   Looks at what comparable products do, then challenges the idea with 2 or 3
+   argued, sourced alternatives and recommends a direction. Read-only.
+   tools: Read, Grep, Glob, WebSearch, WebFetch
+
+3. ux-ui-designer (color: pink)
+   Designs user flows and screens and shows them as self-contained, very
+   visual HTML mockups (variants side by side, clickable flow), saved outside
+   the repository in ~/.claude/artifacts/<project>/. Never modifies the
+   repository.
+   tools: Read, Grep, Glob, Write, Edit, Bash
+
+4. tech-lead (color: blue)
+   Architecture, feasibility, risks, security, task split and code review.
+   Read-only by default; implements a complex part only when the brief
+   contains "GO confirmed by the user", in an isolated Git worktree.
+   tools: Read, Grep, Glob, Edit, Write, Bash
+
+5. developer-frontend (color: cyan)
+   Interfaces, components, mockup integration, interactions, accessibility,
+   frontend tests. Before the GO, proposes a plan without changing anything.
+   After the GO, implements and tests in an isolated Git worktree.
+   tools: Read, Grep, Glob, Edit, Write, Bash
+
+6. developer-backend (color: green)
+   APIs, services, business logic, data, integrations, security, backend
+   tests. Same two modes as developer-frontend: plan before the GO,
+   implementation in an isolated Git worktree after.
+   tools: Read, Grep, Glob, Edit, Write, Bash
+
+7. qa-engineer (color: red)
+   Acceptance criteria, functional and technical tests, regressions,
+   compliance with the design mockups. Before implementation, lists test
+   scenarios proportionate to the risk. After, reviews and tests the branch
+   without changing the code.
+   tools: Read, Grep, Glob, Bash, Write, Edit
+
+8. documentation-engineer (color: yellow)
+   Documents the project for the other agents in docs/ai/ (a shared index
+   plus one page per role) so they don't have to explore the code again; it's
+   its first mission on any project without docs/ai/index.md. Updates it after
+   important changes. Only writes in docs/.
+   tools: Read, Grep, Glob, Write, Edit, Bash
+
+9. administrator (no color)
+   Privileged operations, only when the brief quotes my confirmation word for
+   word: merging into the main branch, pushing, cleaning up worktrees and
+   branches, editing agent files or Claude Code settings. Never writes
+   features, never force-pushes, never rewrites history, never handles
+   secrets.
+   tools: Read, Grep, Glob, Bash, Edit, Write
+
+When you're done, list the files you created and tell me how to start
+working with the team.
+```
+
+</details>
+
+Once the team exists, start Claude Code with **`claude --agent product-manager`** and tell it what you want to build. The product manager delegates to the others, and the office comes alive.
+
+---
+
 ## ⚡ Install in 3 steps
 
 > 🕐 About one minute. No account, no key, no setup.
@@ -70,7 +181,7 @@ There's nothing to configure. On startup, the extension:
 
 Add a new agent and it shows up on its own. The office has room for **10 agents**.
 
-> ℹ️ **Good to know**: the extension needs **custom agents** (the `.md` files in `.claude/agents/`). If you talk to Claude directly, without `claude --agent <name>`, no desk lights up. Only the subagents it launches do.
+> ℹ️ **Good to know**: the extension needs **custom agents** (see [Before you start](#-before-you-start-you-need-custom-agents)). If you talk to Claude directly, without `claude --agent <name>`, no desk lights up. Only the subagents it launches do.
 
 ---
 
