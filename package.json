@@ -1,0 +1,114 @@
+{
+  "name": "agent-office",
+  "displayName": "Agent Office — Who's working?",
+  "description": "A pixel-art office in VS Code that shows which of your Claude Code agents is working right now (read-only, 100% local).",
+  "version": "0.5.0",
+  "publisher": "local",
+  "icon": "media/extension-icon.png",
+  "private": true,
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/FabienPENCHENAT/agent-office.git"
+  },
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Visualization",
+    "AI"
+  ],
+  "main": "./out/extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "viewsContainers": {
+      "panel": [
+        {
+          "id": "agentOffice",
+          "title": "Agent Office",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "agentOffice": [
+        {
+          "type": "webview",
+          "id": "agentOffice.office",
+          "name": "Office"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "agentOffice.show",
+        "title": "Show the agent office",
+        "category": "Agent Office"
+      },
+      {
+        "command": "agentOffice.refresh",
+        "title": "Refresh agent status",
+        "category": "Agent Office"
+      }
+    ],
+    "configuration": {
+      "title": "Agent Office",
+      "properties": {
+        "agentOffice.pollIntervalSeconds": {
+          "type": "number",
+          "default": 2,
+          "minimum": 1,
+          "maximum": 60,
+          "description": "How often (in seconds) the runtime signals are read."
+        },
+        "agentOffice.subagentSilenceMinutes": {
+          "type": "number",
+          "default": 20,
+          "minimum": 1,
+          "description": "An unfinished subagent whose transcript has not changed for this long is shown as \"unknown\" instead of working."
+        },
+        "agentOffice.pinnedAgents": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Agent names to place first among the ten desks, in this order. The others follow in alphabetical order."
+        },
+        "agentOffice.claudeConfigDir": {
+          "type": "string",
+          "default": "",
+          "description": "Claude Code configuration folder. Empty = $CLAUDE_CONFIG_DIR or ~/.claude."
+        },
+        "agentOffice.agentRooms": {
+          "type": "object",
+          "default": {},
+          "additionalProperties": {
+            "type": "string",
+            "enum": [
+              "pm",
+              "challenger",
+              "design",
+              "engineering"
+            ]
+          },
+          "markdownDescription": "Forces an agent's room: `pm` (product manager office), `challenger`, `design` (UX/UI office) or `engineering` (open space). By default, the room is guessed from the agent's name, then from its description. Example: `{\"my-agent\": \"design\"}`."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p .",
+    "watch": "tsc -watch -p .",
+    "lint": "tsc -p . --noEmit && tsc -p tsconfig.webview.json",
+    "test": "npm run compile && node --test out/test/*.test.js",
+    "package": "npm run compile && npx --yes @vscode/vsce@3.2.1 package --no-dependencies --skip-license"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.10",
+    "@types/vscode": "1.90.0",
+    "typescript": "^5.6.3"
+  }
+}

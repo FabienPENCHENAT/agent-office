@@ -1,0 +1,82 @@
+:root {
+  --po-active: #f5c542;
+  --po-active-ink: #1d1a10;
+  --po-unknown: #9aa4b1;
+  --po-idle: var(--vscode-descriptionForeground, #8a8a8a);
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 8px 12px 12px;
+  font-family: var(--vscode-font-family);
+  font-size: var(--vscode-font-size, 13px);
+  color: var(--vscode-foreground);
+  background: var(--vscode-panel-background, var(--vscode-editor-background));
+}
+
+/* Bandeau « quel agent travaille ? » : masqué à l'écran (la scène, la légende et la barre d'état de VS Code
+   portent la même information), conservé pour les lecteurs d'écran. */
+.banner {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.stage {
+  position: relative;
+  width: 100%;
+}
+.scene {
+  position: relative;
+  margin: 0 auto;
+}
+canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  border-radius: 4px;
+  box-shadow: 0 0 0 2px #2b2236, 0 4px 0 2px rgba(43, 34, 54, 0.35);
+}
+
+/* Liste textuelle des dix emplacements (lisible par les lecteurs d'écran). */
+.roster {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 4px 12px;
+}
+.roster li {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+.roster .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.roster .state { color: var(--vscode-descriptionForeground); white-space: nowrap; }
+.roster .swatch { flex: none; width: 8px; height: 8px; border-radius: 1px; align-self: center; }
+.roster .num { color: var(--vscode-descriptionForeground); font-variant-numeric: tabular-nums; }
+.roster li.is-active { background: var(--po-active); color: var(--po-active-ink); }
+.roster li.is-active .state, .roster li.is-active .num { color: var(--po-active-ink); }
+.roster li.is-unknown .state { font-style: italic; }
+.roster li.is-empty { opacity: 0.6; font-style: italic; }
+
+.footer {
+  margin-top: 8px;
+  font-size: 0.9em;
+  color: var(--vscode-descriptionForeground);
+}
+.footer p { margin: 2px 0; }
