@@ -6,7 +6,7 @@
   "publisher": "local",
   "icon": "media/extension-icon.png",
   "private": true,
-  "license": "UNLICENSED",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/FabienPENCHENAT/agent-office.git"
@@ -104,7 +104,7 @@
     "watch": "tsc -watch -p .",
     "lint": "tsc -p . --noEmit && tsc -p tsconfig.webview.json",
     "test": "npm run compile && node --test out/test/*.test.js",
-    "package": "npm run compile && npx --yes @vscode/vsce@3.2.1 package --no-dependencies --skip-license"
+    "package": "npm run compile && npx --yes @vscode/vsce@3.2.1 package --no-dependencies"
   },
   "devDependencies": {
     "@types/node": "^20.14.10",

@@ -13,6 +13,7 @@ A tiny pixel-art office inside VS Code where your AI agents work at their desks,
 ![VS Code](https://img.shields.io/badge/VS%20Code-1.90%2B-007ACC?logo=visualstudiocode&logoColor=white)
 ![Claude Code](https://img.shields.io/badge/Claude%20Code-agents-D97757)
 ![100% local](https://img.shields.io/badge/data-100%25%20local-4fb06a)
+![MIT License](https://img.shields.io/badge/license-MIT-blue)
 
 </div>
 
@@ -187,5 +188,7 @@ How it all works under the hood (signals read, placement rules, accessibility, l
 ---
 
 Inspired by [Pixel Agents](https://github.com/pixel-agents-hq/pixel-agents). The code, the sprites (drawn in code) and the office layout are original.
+
+Released under the [MIT License](LICENSE).
 
 </div>
