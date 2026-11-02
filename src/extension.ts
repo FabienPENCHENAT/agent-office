@@ -1,7 +1,7 @@
 import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { definitionSources, discoverDefinitions } from './discovery/agentDefinitions';
+import { DEFAULT_AGENT, definitionSources, discoverDefinitions, withDefaultAgent } from './discovery/agentDefinitions';
 import { ClaudeCodeAdapter } from './runtime/claudeCode';
 import { readCopilot } from './runtime/copilot';
 import { buildSnapshot } from './state/snapshot';
@@ -21,6 +21,7 @@ function config() {
     silenceMs: Math.max(1, c.get<number>('subagentSilenceMinutes', 20)) * 60_000,
     pinned: c.get<string[]>('pinnedAgents', []),
     rooms: c.get<Record<string, string>>('agentRooms', {}),
+    showClaude: c.get<boolean>('showDefaultClaude', true),
   };
 }
 
@@ -53,8 +54,12 @@ class OfficeController implements vscode.WebviewViewProvider, vscode.Disposable 
 
   private makeAdapter(): ClaudeCodeAdapter {
     const c = config();
-    this.adapterKey = `${c.claudeDir}|${c.silenceMs}`;
-    return new ClaudeCodeAdapter({ claudeDir: c.claudeDir, subagentSilenceMs: c.silenceMs });
+    this.adapterKey = `${c.claudeDir}|${c.silenceMs}|${c.showClaude}`;
+    return new ClaudeCodeAdapter({
+      claudeDir: c.claudeDir,
+      subagentSilenceMs: c.silenceMs,
+      defaultAgent: c.showClaude ? DEFAULT_AGENT : undefined,
+    });
   }
 
   start(): void {
@@ -72,7 +77,7 @@ class OfficeController implements vscode.WebviewViewProvider, vscode.Disposable 
 
   onConfigChanged(): void {
     const c = config();
-    if (`${c.claudeDir}|${c.silenceMs}` !== this.adapterKey) {
+    if (`${c.claudeDir}|${c.silenceMs}|${c.showClaude}` !== this.adapterKey) {
       this.adapter = this.makeAdapter();
     }
     this.start();
@@ -98,7 +103,8 @@ class OfficeController implements vscode.WebviewViewProvider, vscode.Disposable 
         claude = { health: { runtime: 'claude-code', status: 'unavailable', message: String(err) }, signals: [] };
       }
       const notices = discovery.errors.map((e) => `Unreadable agents folder: ${e.dir} (${e.message})`);
-      this.snapshot = buildSnapshot(discovery.definitions, [claude, readCopilot()], Date.now(), {
+      const definitions = c.showClaude ? withDefaultAgent(discovery.definitions) : discovery.definitions;
+      this.snapshot = buildSnapshot(definitions, [claude, readCopilot()], Date.now(), {
         pinned: c.pinned,
         rooms: c.rooms,
         notices,

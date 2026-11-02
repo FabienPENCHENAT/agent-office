@@ -672,6 +672,8 @@
       }
       p.ws = slot.workstation;
       p.color = colors.get(a.id);
+      p.builtin = !!a.builtin;
+      p.model = a.model || null;
       if (p.state !== a.state) {
         p.state = a.state;
         clearLife(p); // le cycle de vie s'efface devant tout changement d'état réel
@@ -1686,7 +1688,10 @@
     if (p && !same) {
       focus = { p, dir: p.dir };
       lookAtViewer(p);
-      cardName.textContent = p.name;
+      // Le personnage « Claude » n'a pas de fichier de définition : la carte ne montre que son nom et son modèle.
+      cardName.textContent = p.model ? `${p.name} · ${p.model}` : p.name;
+      cardOpen.hidden = p.builtin;
+      cardHint.hidden = p.builtin;
       card.hidden = false;
       placeCard();
     }
@@ -1746,7 +1751,7 @@
         const sw = document.createElement('span');
         sw.className = 'swatch';
         sw.setAttribute('aria-hidden', 'true');
-        const name = document.createElement(slot.agent ? 'button' : 'span');
+        const name = document.createElement(slot.agent && !slot.agent.builtin ? 'button' : 'span');
         name.className = 'name';
         const state = document.createElement('span');
         state.className = 'state';
@@ -1761,10 +1766,13 @@
             sw.style.background = p.color;
           }
           name.textContent = a.name;
-          /** @type {HTMLButtonElement} */ (name).type = 'button';
-          name.title = `Edit ${a.name}'s agent file`;
-          name.addEventListener('click', () => openAgent(a.id));
-          state.textContent = stateLabel(a.state) + (a.updatedAt ? ` · ${fmtTime(a.updatedAt)}` : '');
+          if (!a.builtin) {
+            /** @type {HTMLButtonElement} */ (name).type = 'button';
+            name.title = `Edit ${a.name}'s agent file`;
+            name.addEventListener('click', () => openAgent(a.id));
+          }
+          state.textContent =
+            stateLabel(a.state) + (a.model ? ` · ${a.model}` : '') + (a.updatedAt ? ` · ${fmtTime(a.updatedAt)}` : '');
           if (a.runtime !== 'claude-code') {
             state.textContent += ` · ${a.runtime}`;
           }

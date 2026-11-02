@@ -55,7 +55,8 @@ export function roleOf(name: string, overrides: Record<string, string> = {}, des
 
 /**
  * Attribue un poste à chaque agent représenté (dans l'ordre stable des emplacements) :
- *  1. PM, challenger et designer prennent leur bureau individuel s'il est libre ;
+ *  1. PM, challenger et designer prennent leur bureau individuel s'il est libre ; le personnage « Claude »
+ *     intégré prend le bureau du PM en dernier, seulement si aucun agent ne l'occupe ;
  *  2. les autres occupent l'open space (7 postes) ;
  *  3. s'il n'y a plus de place dans l'open space, les bureaux individuels libres servent d'appoint.
  */
@@ -68,8 +69,9 @@ export function placeAgents(
   const taken = new Set<Workstation>();
   const pending: AgentStatus[] = [];
 
-  for (const agent of agents) {
-    const role = roleOf(agent.name, overrides, descriptions.get(agent.id));
+  const ordered = [...agents.filter((a) => !a.builtin), ...agents.filter((a) => a.builtin)];
+  for (const agent of ordered) {
+    const role = agent.builtin && !overrides[agent.name] ? 'pm' : roleOf(agent.name, overrides, descriptions.get(agent.id));
     const office = role === 'engineering' ? undefined : ROLE_OFFICE[role];
     if (office && !taken.has(office)) {
       taken.add(office);

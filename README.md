@@ -24,6 +24,7 @@ A tiny pixel-art office inside VS Code. When one of your Claude Code agents star
 - **Live status**: see which agent is working, idle or in an unknown state, refreshed every 2 seconds.
 - **Real delegations**: visits, meetings and hand-ins are triggered by what your agents actually do.
 - **Zero setup**: agents, desks and colors are detected automatically.
+- **Claude itself has a desk**: when you talk to Claude Code without a custom agent, a **Claude** character works, delegates to your agents, and shows the model it's using (e.g. Opus 5.5). No custom agent needed to see the office come alive.
 - **Edit an agent in one click**: click a character, it turns to face you, and **Edit agent file** opens its `.md` in the editor. Restart Claude Code to apply your changes.
 - **Private by design**: 100% local and read-only. No code, prompt or conversation is ever displayed.
 
@@ -161,7 +162,7 @@ Ask it for something. As soon as it starts, its character walks to its desk with
 
 Everything is automatic. The extension:
 
-1. **finds your agents** in `~/.claude/agents/` and in the open project's `.claude/agents/`, and shows up to 10 of them;
+1. **finds your agents** in `~/.claude/agents/` and in the open project's `.claude/agents/`, and shows up to 10 of them, plus a **Claude** character for the sessions you start without `--agent`;
 2. **gives each one a desk** based on its name, or its description when the name says nothing about the role:
 
    | Name or description mentions… | Desk |
@@ -193,6 +194,7 @@ Everything works out of the box. To customize, open VS Code Settings and search 
 |---|---|---|
 | `agentOffice.agentRooms` | `{}` | Force an agent's desk, e.g. `{ "my-agent": "design" }` (`pm`, `challenger`, `design` or `engineering`) |
 | `agentOffice.pinnedAgents` | `[]` | Agents shown first when you have more than 10 |
+| `agentOffice.showDefaultClaude` | `true` | Show the **Claude** character for sessions started without a custom agent |
 | `agentOffice.pollIntervalSeconds` | `2` | Refresh interval, in seconds |
 
 Two more advanced settings are described in the [technical docs](docs/TECHNICAL.md#signal-sources-claude-code).
@@ -201,7 +203,7 @@ Two more advanced settings are described in the [technical docs](docs/TECHNICAL.
 
 - **100% local**: the extension makes no network request.
 - **Read-only**: it never changes a file and never starts or controls an agent.
-- **Nothing of your work is shown**: only agent names, statuses and timestamps reach the office view.
+- **Nothing of your work is shown**: only agent names, statuses, the Claude model name and timestamps reach the office view.
 
 ## Known limitations
 

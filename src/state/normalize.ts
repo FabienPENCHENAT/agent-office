@@ -20,7 +20,17 @@ export function normalize(definitions: AgentDefinition[], reports: RuntimeReport
       state = 'inactive';
     }
     const relevant = signals.filter((s) => (state === 'active' ? s.state === 'active' : true));
-    const updatedAt = relevant.length ? Math.max(...relevant.map((s) => s.observedAt)) : undefined;
-    return { id: def.id, name: def.name, runtime: def.runtime, color: def.color, state, updatedAt };
+    const recent = [...relevant].sort((a, b) => b.observedAt - a.observedAt);
+    const model = recent.find((s) => s.model)?.model;
+    return {
+      id: def.id,
+      name: def.name,
+      runtime: def.runtime,
+      color: def.color,
+      state,
+      updatedAt: recent[0]?.observedAt,
+      ...(model ? { model } : {}),
+      ...(def.builtin ? { builtin: true } : {}),
+    };
   });
 }

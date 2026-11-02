@@ -16,6 +16,8 @@ import { ActivitySignal, Delegation, RuntimeReport } from '../types';
  *     (`agentType`, `finished`, `spawnDepth`). Un sous-agent non terminé d'une session vivante est actif.
  *  4. Délégations : un sous-agent de profondeur 1 a été lancé par l'agent principal de sa session.
  *     Lancement = création du transcript du sous-agent ; fin = écriture de `finished: true`.
+ *  5. Session sans agent principal : attribuée à `defaultAgent` (le personnage « Claude ») s'il est fourni,
+ *     avec le modèle lu dans le dernier champ `"model"` de la fin du transcript.
  *
  * Aucun contenu de conversation n'est conservé ni transmis : seuls le nom d'agent,
  * l'état et un horodatage sortent de ce module.
@@ -41,6 +43,8 @@ export interface ClaudeAdapterOptions {
   finishedWindowMs?: number;
   now?: () => number;
   isPidAlive?: (pid: number) => boolean;
+  /** Nom attribué à l'agent principal d'une session lancée sans `--agent`. Absent : ces sessions sont ignorées. */
+  defaultAgent?: string;
 }
 
 interface SessionRecord {
@@ -99,6 +103,31 @@ async function readAgentSetting(transcript: string): Promise<string | undefined>
   }
 }
 
+/** « claude-opus-5-5 » → « Opus 5.5 » ; un suffixe de date (« -20250514 ») est retiré. */
+export function modelLabel(id: string): string {
+  const parts = id.replace(/^claude-/, '').replace(/-\d{8}$/, '').split('-');
+  const family = parts.shift() ?? '';
+  return [family.charAt(0).toUpperCase() + family.slice(1), parts.join('.')].filter(Boolean).join(' ');
+}
+
+/** Lit uniquement la fin du transcript pour y trouver le dernier modèle Claude utilisé. Rien d'autre n'est conservé. */
+async function readModel(transcript: string): Promise<string | undefined> {
+  let handle: fs.FileHandle | undefined;
+  try {
+    handle = await fs.open(transcript, 'r');
+    const { size } = await handle.stat();
+    const length = Math.min(size, HEAD_BYTES);
+    const buffer = Buffer.alloc(length);
+    await handle.read(buffer, 0, length, size - length);
+    const ids = buffer.toString('utf8').match(/"model":"claude-[a-z0-9.-]+"/g);
+    return ids ? modelLabel(ids[ids.length - 1].slice(9, -1)) : undefined;
+  } catch {
+    return undefined;
+  } finally {
+    await handle?.close();
+  }
+}
+
 async function findSessionDir(projectsDir: string, session: SessionRecord): Promise<string | undefined> {
   const candidates: string[] = [];
   if (session.cwd) {
@@ -126,6 +155,7 @@ export class ClaudeCodeAdapter {
   private readonly agentSettingCache = new Map<string, string | null>();
   private readonly sessionDirCache = new Map<string, string>();
   private readonly metaCache = new Map<string, { mtimeMs: number; finished: boolean }>();
+  private readonly modelCache = new Map<string, { mtimeMs: number; model?: string }>();
 
   constructor(private readonly options: ClaudeAdapterOptions) {}
 
@@ -187,6 +217,7 @@ export class ClaudeCodeAdapter {
       if (!liveIds.has(key)) {
         this.agentSettingCache.delete(key);
         this.sessionDirCache.delete(key);
+        this.modelCache.delete(key);
       }
     }
 
@@ -215,14 +246,18 @@ export class ClaudeCodeAdapter {
       }
     }
 
-    const mainAgent = await this.mainAgent(session, sessionDir);
+    const named = await this.mainAgent(session, sessionDir);
+    // Sans agent nommé, la session est celle de Claude lui-même (une fois le transcript lisible).
+    const mainAgent = named ?? (sessionDir ? this.options.defaultAgent : undefined);
     if (mainAgent) {
       const state = session.status === 'busy' ? 'active' : session.status === 'idle' ? 'idle' : 'unknown';
+      const model = !named && sessionDir ? await this.model(session.sessionId, sessionDir) : undefined;
       signals.push({
         runtime: 'claude-code',
         agentName: mainAgent,
         state,
         observedAt: session.statusUpdatedAt ?? session.updatedAt ?? this.now(),
+        ...(model ? { model } : {}),
       });
     }
 
@@ -261,6 +296,24 @@ export class ClaudeCodeAdapter {
     const setting = await readAgentSetting(path.join(sessionDir, `${session.sessionId}.jsonl`));
     this.agentSettingCache.set(session.sessionId, setting ?? null);
     return setting;
+  }
+
+  /** Modèle de la session, relu seulement quand le transcript a changé. */
+  private async model(sessionId: string, sessionDir: string): Promise<string | undefined> {
+    const transcript = path.join(sessionDir, `${sessionId}.jsonl`);
+    let mtimeMs: number;
+    try {
+      mtimeMs = (await fs.stat(transcript)).mtimeMs;
+    } catch {
+      return undefined;
+    }
+    const cached = this.modelCache.get(sessionId);
+    if (cached?.mtimeMs === mtimeMs) {
+      return cached.model;
+    }
+    const model = await readModel(transcript);
+    this.modelCache.set(sessionId, { mtimeMs, model });
+    return model;
   }
 
   private async subagents(dir: string): Promise<SubagentInfo[]> {

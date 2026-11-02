@@ -82,6 +82,11 @@
           "default": "",
           "description": "Claude Code configuration folder. Empty = $CLAUDE_CONFIG_DIR or ~/.claude."
         },
+        "agentOffice.showDefaultClaude": {
+          "type": "boolean",
+          "default": true,
+          "description": "Shows a \"Claude\" character for Claude Code sessions started without --agent (your conversations with Claude itself), with the model it uses."
+        },
         "agentOffice.agentRooms": {
           "type": "object",
           "default": {},

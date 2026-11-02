@@ -3,8 +3,8 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { test } from 'node:test';
-import { definitionSources, discoverDefinitions, parseFrontmatter } from '../discovery/agentDefinitions';
-import { ClaudeCodeAdapter, projectDirName } from '../runtime/claudeCode';
+import { DEFAULT_AGENT, definitionSources, discoverDefinitions, parseFrontmatter, withDefaultAgent } from '../discovery/agentDefinitions';
+import { ClaudeCodeAdapter, modelLabel, projectDirName } from '../runtime/claudeCode';
 import { readCopilot } from '../runtime/copilot';
 import { normalize } from '../state/normalize';
 import { roleOf } from '../state/placement';
@@ -115,6 +115,58 @@ test('Claude Code : sous-agents non terminés actifs, terminés ignorés, silenc
   const report = await adapter.read();
   const states = Object.fromEntries(report.signals.map((s) => [s.agentName, s.state]));
   assert.deepEqual(states, { 'tech-lead': 'active', 'ux-ui-designer': 'unknown' });
+});
+
+test('Claude par défaut : session sans agent → « Claude » avec son modèle, et ses délégations', async () => {
+  const { dir, proj, session } = claudeFixture();
+  session(100, 's-claude', 'busy');
+  session(200, 's-pm', 'idle');
+  write(
+    path.join(proj, 's-claude.jsonl'),
+    '{"type":"user"}\n{"message":{"model":"claude-sonnet-5-5"}}\n{"message":{"model":"claude-opus-5-5"}}\n{"message":{"model":"<synthetic>"}}\n',
+  );
+  write(path.join(proj, 's-pm.jsonl'), '{"type":"agent-setting","agentSetting":"product-manager"}\n{"message":{"model":"claude-opus-5-5"}}\n');
+  const sub = path.join(proj, 's-claude', 'subagents');
+  write(path.join(sub, 'agent-a.meta.json'), JSON.stringify({ agentType: 'tech-lead', spawnDepth: 1 }));
+  write(path.join(sub, 'agent-a.jsonl'), '{}', NOW - 5_000);
+  const options = { claudeDir: dir, subagentSilenceMs: 60_000, now: () => NOW, isPidAlive: () => true };
+
+  const report = await new ClaudeCodeAdapter({ ...options, defaultAgent: DEFAULT_AGENT }).read();
+  const main = Object.fromEntries(report.signals.map((s) => [s.agentName, [s.state, s.model]]));
+  assert.deepEqual(main, {
+    Claude: ['active', 'Opus 5.5'],
+    'product-manager': ['idle', undefined],
+    'tech-lead': ['active', undefined],
+  });
+  assert.deepEqual(report.delegations?.map((d) => [d.from, d.to]), [['Claude', 'tech-lead']]);
+
+  // Réglage désactivé : comportement d'avant, la session sans agent est ignorée.
+  const off = await new ClaudeCodeAdapter(options).read();
+  assert.ok(!off.signals.some((s) => s.agentName === DEFAULT_AGENT));
+  assert.equal(off.delegations?.length, 0);
+
+  assert.equal(modelLabel('claude-opus-5-5'), 'Opus 5.5');
+  assert.equal(modelLabel('claude-haiku-4-5-20251001'), 'Haiku 4.5');
+  assert.equal(modelLabel('claude-fable-5-1'), 'Fable 5.1');
+});
+
+test('Claude par défaut : toujours représenté, bureau du PM seulement s\'il est libre', () => {
+  const names = Array.from({ length: 10 }, (_, i) => `dev-${i}`);
+  const crowded = buildSnapshot(withDefaultAgent(names.map((n) => def(n))), [okClaude()], NOW);
+  assert.equal(crowded.slots[0].agent?.name, DEFAULT_AGENT);
+  assert.equal(crowded.slots[0].agent?.builtin, true);
+  assert.deepEqual(crowded.overflow.map((a) => a.name), ['dev-9']);
+
+  const alone = buildSnapshot(withDefaultAgent([def('dev')]), [okClaude()], NOW);
+  const ws = (snap: typeof alone) =>
+    Object.fromEntries(snap.slots.filter((s) => s.agent).map((s) => [s.agent!.name, s.workstation]));
+  assert.equal(ws(alone)[DEFAULT_AGENT], 'office-pm');
+  const withPm = buildSnapshot(withDefaultAgent([def('product-manager')]), [okClaude()], NOW);
+  assert.equal(ws(withPm)['product-manager'], 'office-pm');
+  assert.match(String(ws(withPm)[DEFAULT_AGENT]), /^open-/);
+
+  // Un agent défini nommé « Claude » garde la place : pas de doublon.
+  assert.equal(withDefaultAgent([def(DEFAULT_AGENT)]).length, 1);
 });
 
 test('Claude Code : registre des sessions absent → source indisponible', async () => {

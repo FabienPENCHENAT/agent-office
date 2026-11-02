@@ -2,6 +2,7 @@ import { AgentStatus, SLOT_COUNT, Slot } from '../types';
 
 /**
  * Règle stable de placement :
+ *  0. le personnage « Claude » intégré, toujours représenté ;
  *  1. les agents listés dans `agentOffice.pinnedAgents`, dans cet ordre ;
  *  2. puis les autres, triés par nom (ordre alphabétique, insensible à la casse),
  *     puis par runtime (claude-code avant copilot) en cas d'égalité.
@@ -10,6 +11,9 @@ import { AgentStatus, SLOT_COUNT, Slot } from '../types';
  */
 export function orderAgents(agents: AgentStatus[], pinned: string[]): AgentStatus[] {
   const rank = (a: AgentStatus): number => {
+    if (a.builtin) {
+      return -1;
+    }
     const i = pinned.indexOf(a.name);
     return i === -1 ? Number.MAX_SAFE_INTEGER : i;
   };

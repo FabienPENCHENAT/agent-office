@@ -2,6 +2,18 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { AgentDefinition, RuntimeId } from '../types';
 
+/** Nom du personnage qui représente Claude dans les sessions lancées sans `--agent`. */
+export const DEFAULT_AGENT = 'Claude';
+
+/** Définition du personnage « Claude », sauf si un agent défini porte déjà ce nom. */
+export function withDefaultAgent(definitions: AgentDefinition[]): AgentDefinition[] {
+  const id = `claude-code:${DEFAULT_AGENT}`;
+  if (definitions.some((d) => d.id === id)) {
+    return definitions;
+  }
+  return [...definitions, { id, name: DEFAULT_AGENT, runtime: 'claude-code', scope: 'user', color: '#d97757', builtin: true }];
+}
+
 export interface DefinitionSource {
   runtime: RuntimeId;
   scope: 'user' | 'project';

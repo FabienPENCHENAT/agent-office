@@ -37,7 +37,7 @@ Delegation scenes (visit, meeting, hand-in) are triggered **only** by an observe
 
 ## Editing an agent
 
-Click a character: it stops and turns to face you, and a card shows its name with an **Edit agent file** link. The link opens the agent's definition (`.md`) in the editor; Claude Code only picks up the change in a new session. Clicking elsewhere or pressing `Escape` closes the card, and the character resumes what it was doing. Names in the list below the office open the file too (keyboard access).
+Click a character: it stops and turns to face you, and a card shows its name with an **Edit agent file** link. The link opens the agent's definition (`.md`) in the editor; Claude Code only picks up the change in a new session. Clicking elsewhere or pressing `Escape` closes the card, and the character resumes what it was doing. Names in the list below the office open the file too (keyboard access). The **Claude** character has no file: its card only shows its name and model.
 
 The file path stays in the extension: the view only sends back the agent's identifier, and only a file found during discovery can be opened.
 
@@ -50,6 +50,8 @@ The file path stays in the extension: the view only sends back the agent's ident
 
 Only the `name`, `color` and `description` fields of the frontmatter are read. Without `name`, the file name is used. The `description` is only used to guess an agent's room; it stays in the extension and is never sent to the view. Built-in agents (Explore, general-purpose…) and plugin agents are not shown.
 
+A **Claude** character is added for Claude Code sessions started without `--agent` (see below). It has no definition file, uses Claude's terracotta color, and can be hidden with `agentOffice.showDefaultClaude: false`. If you define an agent named `Claude` yourself, yours is used instead.
+
 ## Signal sources (Claude Code)
 
 All of these are read-only, and the extension never starts a process.
@@ -57,7 +59,9 @@ All of these are read-only, and the extension never starts a process.
 1. **Session registry** `~/.claude/sessions/<pid>.json`, maintained by Claude Code: `pid`, `sessionId`, `cwd`, `status` (`busy` / `idle`).
    - A session is alive if its process still exists (`process.kill(pid, 0)`, which only checks that it exists).
    - A session whose process is gone is expired and ignored.
-2. **Main agent** of a session (for example `claude --agent product-manager`): the `agent` field of the registry, otherwise the `{"type":"agent-setting","agentSetting":"<name>"}` entry in the first 64 KB of the transcript. Nothing else is read from the transcript.
+2. **Main agent** of a session (for example `claude --agent product-manager`): the `agent` field of the registry, otherwise the `{"type":"agent-setting","agentSetting":"<name>"}` entry in the first 64 KB of the transcript.
+   - A session with neither is a conversation with Claude itself: it is attributed to the **Claude** character, and its model is the last `"model":"claude-…"` field in the final 64 KB of the transcript, shown as e.g. “Opus 5.5”. The transcript is only re-read when it changes.
+   - Nothing else is read from the transcript.
    - `busy` → **working**; `idle` → **idle**; any other value → **unknown**.
 3. **Subagents** `~/.claude/projects/<project>/<sessionId>/subagents/agent-*.meta.json` (`agentType`, `finished`, `spawnDepth`):
    - not finished → **working**;
@@ -76,8 +80,9 @@ Signals are read every `agentOffice.pollIntervalSeconds` seconds (2 by default).
 ## Ten desks, rooms and colors
 
 **Which agents are shown** (stable rule):
-1. first those listed in `agentOffice.pinnedAgents`, in that order;
-2. then all the others in alphabetical order of their name (case-insensitive).
+1. first the **Claude** character, so it is always on display;
+2. then those listed in `agentOffice.pinnedAgents`, in that order;
+3. then all the others in alphabetical order of their name (case-insensitive).
 
 The first ten are shown. Beyond that, agents are listed below the office with their status, and still counted in the status bar. With fewer than ten agents, the remaining desks are “free”.
 
@@ -95,7 +100,7 @@ The first ten are shown. Beyond that, agents are listed below the office with th
 3. if the name says nothing about the role, the agent's **description** (English or French keywords): *product manager / owner*, *project manager*, *orchestrates*, *coordinates* → `pm`; *challenge*, *devil's advocate*, *brainstorm* → `challenger`; *UX*, *UI*, *user experience*, *designer*, *wireframe*, *mockup*, *Figma* → `design`. When several match, the keyword that appears first wins;
 4. otherwise, `engineering`.
 
-If two agents claim the same private office, the first in order gets it and the next one joins the open space. If the open space is full, free private offices are used as overflow. Each agent always keeps the same desk.
+If two agents claim the same private office, the first in order gets it and the next one joins the open space. The **Claude** character takes the product manager's office only if no agent claims it, otherwise it joins the open space (`agentOffice.agentRooms` can still force its room). If the open space is full, free private offices are used as overflow. Each agent always keeps the same desk.
 
 Example setting:
 
@@ -127,7 +132,7 @@ Example setting:
 - **Copilot**: there is no documented local interface exposing the activity or delegations of a Copilot agent.
 - **Claude Code**: the `~/.claude/sessions` registry and the `subagents/*.meta.json` files are internal details, not publicly documented. They were observed with Claude Code 2.1.3xx and may change. If the registry disappears, the extension shows “Unknown status”.
 - **Delegations at depth 2 or more** (a subagent launching another): their exact delegating agent can't be identified. These agents show as working, but without a visit or meeting scene.
-- **Main session without `--agent`**: when you talk to Claude directly, no defined agent is running, so no desk lights up. The subagents Claude launches do light up, but without a delegating agent on screen.
+- **Main session without `--agent`**: shown as the **Claude** character. Several such sessions share that one character: it works as long as any of them is busy, and shows the model of the most recent one.
 - Grouping into a meeting assumes the subagents are launched less than 4 seconds apart. Beyond that, each one gets a visit.
 - An agent waiting for permission may stay “working” as long as its session is `busy`.
 - Guessing a room from the description is a heuristic. When it gets it wrong, set `agentOffice.agentRooms`.

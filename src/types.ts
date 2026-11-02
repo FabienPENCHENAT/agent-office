@@ -17,6 +17,8 @@ export interface AgentDefinition {
   description?: string;
   /** Chemin du fichier .md de la définition, pour l'ouvrir dans l'éditeur. Il n'est jamais envoyé à la vue. */
   file?: string;
+  /** Personnage « Claude » des sessions lancées sans agent : il n'a pas de fichier de définition. */
+  builtin?: boolean;
 }
 
 /** Signal brut émis par un adaptateur de runtime pour une instance d'agent. */
@@ -27,6 +29,8 @@ export interface ActivitySignal {
   state: 'active' | 'idle' | 'unknown';
   /** Horodatage (ms) de la dernière mise à jour observée de ce signal. */
   observedAt: number;
+  /** Modèle utilisé, sous forme lisible (ex. « Opus 5.5 »), quand il est connu. */
+  model?: string;
 }
 
 /** Disponibilité de la source de signaux d'un runtime. */
@@ -67,6 +71,10 @@ export interface AgentStatus {
   state: AgentState;
   /** Dernière mise à jour connue de l'état (ms), ou undefined. */
   updatedAt?: number;
+  /** Modèle de l'instance la plus récente, sous forme lisible, quand il est connu. */
+  model?: string;
+  /** Personnage « Claude » intégré, sans fichier de définition. */
+  builtin?: boolean;
 }
 
 /** Postes de travail du bureau : trois bureaux individuels et l'open space engineering. */

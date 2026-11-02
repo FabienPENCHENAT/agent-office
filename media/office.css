@@ -63,7 +63,7 @@ canvas {
   background: var(--vscode-editorWidget-background, #252526);
   box-shadow: 0 0 0 2px #2b2236, 0 3px 0 2px rgba(43, 34, 54, 0.35);
 }
-.agent-card[hidden] { display: none; }
+.agent-card[hidden], .agent-card [hidden] { display: none; }
 .agent-card__name { font-weight: 600; }
 .agent-card__open {
   padding: 0;
