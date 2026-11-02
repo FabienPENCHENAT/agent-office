@@ -48,6 +48,35 @@ canvas {
   box-shadow: 0 0 0 2px #2b2236, 0 4px 0 2px rgba(43, 34, 54, 0.35);
 }
 
+/* Carte du personnage sélectionné : lien vers sa définition (.md). */
+.agent-card {
+  position: absolute;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  max-width: 240px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  color: var(--vscode-editorWidget-foreground, var(--vscode-foreground));
+  background: var(--vscode-editorWidget-background, #252526);
+  box-shadow: 0 0 0 2px #2b2236, 0 3px 0 2px rgba(43, 34, 54, 0.35);
+}
+.agent-card[hidden] { display: none; }
+.agent-card__name { font-weight: 600; }
+.agent-card__open {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--vscode-textLink-foreground);
+  font: inherit;
+  cursor: pointer;
+}
+.agent-card__open:hover { text-decoration: underline; color: var(--vscode-textLink-activeForeground); }
+.agent-card__open:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 1px; }
+.agent-card__hint { font-size: 0.85em; color: var(--vscode-descriptionForeground); }
+
 /* Liste textuelle des dix emplacements (lisible par les lecteurs d'écran). */
 .roster {
   list-style: none;
@@ -66,6 +95,18 @@ canvas {
   border-radius: 3px;
 }
 .roster .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.roster button.name {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.roster button.name:hover { text-decoration: underline; }
+.roster button.name:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 1px; }
 .roster .state { color: var(--vscode-descriptionForeground); white-space: nowrap; }
 .roster .swatch { flex: none; width: 8px; height: 8px; border-radius: 1px; align-self: center; }
 .roster .num { color: var(--vscode-descriptionForeground); font-variant-numeric: tabular-nums; }

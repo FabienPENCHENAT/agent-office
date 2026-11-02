@@ -115,7 +115,7 @@ export async function discoverDefinitions(sources: DefinitionSource[]): Promise<
       if (existing && existing.scope === 'project' && source.scope === 'user') {
         continue;
       }
-      byId.set(id, { id, name, runtime: source.runtime, scope: source.scope, color: fm.color, description: fm.description });
+      byId.set(id, { id, name, runtime: source.runtime, scope: source.scope, color: fm.color, description: fm.description, file });
     }
   }
   return { definitions: [...byId.values()], errors };

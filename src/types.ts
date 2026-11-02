@@ -15,6 +15,8 @@ export interface AgentDefinition {
    * dont le nom ne dit rien. Elle reste côté extension : elle n'est jamais envoyée à la vue.
    */
   description?: string;
+  /** Chemin du fichier .md de la définition, pour l'ouvrir dans l'éditeur. Il n'est jamais envoyé à la vue. */
+  file?: string;
 }
 
 /** Signal brut émis par un adaptateur de runtime pour une instance d'agent. */

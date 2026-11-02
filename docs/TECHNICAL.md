@@ -35,6 +35,12 @@ Bubbles are always drawn on top of everything else. A character sitting on the s
 
 Delegation scenes (visit, meeting, hand-in) are triggered **only** by an observed subagent launch or finish. Their duration and staging are illustrative. A scene only plays for a recent delegation (less than 90 seconds old): when the panel opens, old delegations are not replayed.
 
+## Editing an agent
+
+Click a character: it stops and turns to face you, and a card shows its name with an **Edit agent file** link. The link opens the agent's definition (`.md`) in the editor; Claude Code only picks up the change in a new session. Clicking elsewhere or pressing `Escape` closes the card, and the character resumes what it was doing. Names in the list below the office open the file too (keyboard access).
+
+The file path stays in the extension: the view only sends back the agent's identifier, and only a file found during discovery can be opened.
+
 ## Supported runtimes
 
 | Runtime | Agent discovery | Active status and delegations |
@@ -114,7 +120,7 @@ Example setting:
 - Data stays **100% local**: no network request, neither in the extension nor in the Webview.
 - The Webview uses a strict CSP: `default-src 'none'`, a single local script with a nonce, local styles and images only.
 - The Webview only receives names, statuses, desks, colors and timestamps.
-- The extension never writes to any configuration, session or agent file. It doesn't start or control any agent, and can't create one.
+- The extension never writes to any configuration, session or agent file (it can open an agent's file in the editor; you make the edits). It doesn't start or control any agent, and can't create one.
 
 ## Limits
 

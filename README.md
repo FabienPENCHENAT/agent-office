@@ -24,6 +24,7 @@ A tiny pixel-art office inside VS Code. When one of your Claude Code agents star
 - **Live status**: see which agent is working, idle or in an unknown state, refreshed every 2 seconds.
 - **Real delegations**: visits, meetings and hand-ins are triggered by what your agents actually do.
 - **Zero setup**: agents, desks and colors are detected automatically.
+- **Edit an agent in one click**: click a character, it turns to face you, and **Edit agent file** opens its `.md` in the editor. Restart Claude Code to apply your changes.
 - **Private by design**: 100% local and read-only. No code, prompt or conversation is ever displayed.
 
 ## Getting started

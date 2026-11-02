@@ -32,6 +32,8 @@ function reduceMotion(): ReduceMotion {
 class OfficeController implements vscode.WebviewViewProvider, vscode.Disposable {
   private view?: vscode.WebviewView;
   private snapshot?: OfficeSnapshot;
+  /** Fichier .md de chaque agent découvert, par identifiant. Reste côté extension. */
+  private files = new Map<string, string>();
   private timer?: NodeJS.Timeout;
   private running = false;
   private adapter: ClaudeCodeAdapter;
@@ -88,6 +90,7 @@ class OfficeController implements vscode.WebviewViewProvider, vscode.Disposable 
         .filter((f) => f.uri.scheme === 'file')
         .map((f) => f.uri.fsPath);
       const discovery = await discoverDefinitions(definitionSources(c.claudeDir, os.homedir(), workspaceDirs));
+      this.files = new Map(discovery.definitions.flatMap((d) => (d.file ? [[d.id, d.file] as const] : [])));
       let claude: RuntimeReport;
       try {
         claude = await this.adapter.read();
@@ -119,6 +122,19 @@ class OfficeController implements vscode.WebviewViewProvider, vscode.Disposable 
     void this.view?.webview.postMessage({ type: 'snapshot', snapshot: this.snapshot, summary });
   }
 
+  /** Ouvre la définition d'un agent. La vue ne donne qu'un identifiant : seul un fichier découvert peut être ouvert. */
+  private async openAgent(id: unknown): Promise<void> {
+    const file = typeof id === 'string' ? this.files.get(id) : undefined;
+    if (!file) {
+      return;
+    }
+    try {
+      await vscode.window.showTextDocument(vscode.Uri.file(file), { preview: false });
+    } catch (err) {
+      void vscode.window.showErrorMessage(`Agent Office: cannot open ${file} (${String(err)})`);
+    }
+  }
+
   private postMotion(): void {
     void this.view?.webview.postMessage({ type: 'motion', reduceMotion: reduceMotion() });
   }
@@ -134,6 +150,8 @@ class OfficeController implements vscode.WebviewViewProvider, vscode.Disposable 
       if (msg?.type === 'ready') {
         this.postMotion();
         this.render();
+      } else if (msg?.type === 'openAgent') {
+        void this.openAgent(msg.id);
       }
     });
     view.onDidDispose(() => {

@@ -290,6 +290,9 @@
   /** @type {Map<string, {targets:Set<string>, at:number}>} briefs en attente de regroupement */
   const pendingBriefs = new Map();
   let clock = 0;
+  /** Personnage sélectionné d'un clic : il s'arrête et regarde l'utilisateur. `dir` : orientation à lui rendre. */
+  /** @type {{p:any, dir:Dir}|null} */
+  let focus = null;
 
   const byName = (/** @type {string} */ name) => [...people.values()].find((p) => p.name === name);
   const station = (/** @type {any} */ p) => STATIONS[p.ws];
@@ -676,6 +679,9 @@
     });
     for (const [id, p] of people) {
       if (!seen.has(id)) {
+        if (focus && focus.p === p) {
+          unfocus();
+        }
         clearLife(p);
         people.delete(id);
       }
@@ -715,6 +721,9 @@
       }
       p.placed = true;
     }
+    if (focus) {
+      lookAtViewer(focus.p);
+    }
   }
 
   // ======================================================================
@@ -736,6 +745,10 @@
         if (p.flash.t <= 0) {
           p.flash = null;
         }
+      }
+      if (focus && focus.p === p) {
+        lookAtViewer(p);
+        continue;
       }
       for (let guard = 0; guard < 4; guard++) {
         if (!p.cur) {
@@ -919,6 +932,7 @@
       ctx.fillRect(x + 1, Math.round(p.y) - 1, 10, 3);
     }
     ctx.drawImage(img, x, y);
+    p.hit = { x, y, w: 12, h: rows.length };
     // Priorité : bulle éclair, bulle ponctuelle de la scène, activité en cours, puis « au travail » dès que l'agent est actif.
     const bubble = (p.flash && p.flash.bubble) || p.bubble || p.activity || (p.state === 'active' ? 'work' : null);
     // Les bulles sont dessinées après tout le reste : elles restent au premier plan.
@@ -1590,6 +1604,106 @@
   }
 
   // ======================================================================
+  // Sélection d'un personnage : il regarde l'utilisateur et propose d'ouvrir sa définition (.md)
+  // ======================================================================
+  const card = document.createElement('div');
+  card.className = 'agent-card';
+  card.hidden = true;
+  const cardName = document.createElement('span');
+  cardName.className = 'agent-card__name';
+  const cardOpen = document.createElement('button');
+  cardOpen.type = 'button';
+  cardOpen.className = 'agent-card__open';
+  cardOpen.textContent = 'Edit agent file';
+  const cardHint = document.createElement('span');
+  cardHint.className = 'agent-card__hint';
+  cardHint.textContent = 'Restart Claude Code to apply your changes.';
+  card.append(cardName, cardOpen, cardHint);
+  scene.appendChild(card);
+
+  function lookAtViewer(/** @type {any} */ p) {
+    p.dir = 'down';
+    if (p.pose === 'walk') {
+      p.pose = 'stand';
+    }
+  }
+
+  function openAgent(/** @type {string} */ id) {
+    vscode.postMessage({ type: 'openAgent', id });
+  }
+
+  function unfocus() {
+    if (focus) {
+      focus.p.dir = focus.dir;
+      focus = null;
+    }
+    card.hidden = true;
+  }
+
+  function placeCard() {
+    if (!focus || !focus.p.hit) {
+      return;
+    }
+    const k = scene.clientWidth / W;
+    const hit = focus.p.hit;
+    const half = card.offsetWidth / 2;
+    const cx = Math.min(Math.max((hit.x + hit.w / 2) * k, half + 4), scene.clientWidth - half - 4);
+    // Au-dessus de la tête, sauf en haut de la scène où la carte passe sous les pieds.
+    const above = hit.y > H * 0.4;
+    card.style.left = `${cx - half}px`;
+    card.style.top = above ? `${hit.y * k - card.offsetHeight - 4}px` : `${(hit.y + hit.h) * k + 4}px`;
+  }
+
+  /** Personnage sous le point (en pixels de la scène), le plus en avant s'ils se chevauchent. */
+  function personAt(/** @type {number} */ x, /** @type {number} */ y) {
+    let found = null;
+    for (const p of people.values()) {
+      const h = p.hit;
+      if (h && x >= h.x - 1 && x <= h.x + h.w + 1 && y >= h.y - 1 && y <= h.y + h.h + 1 && (!found || p.y > found.y)) {
+        found = p;
+      }
+    }
+    return found;
+  }
+
+  function eventPoint(/** @type {MouseEvent} */ e) {
+    const r = canvas.getBoundingClientRect();
+    return { x: ((e.clientX - r.left) * W) / r.width, y: ((e.clientY - r.top) * H) / r.height };
+  }
+
+  canvas.addEventListener('mousemove', (e) => {
+    const pt = eventPoint(e);
+    canvas.style.cursor = personAt(pt.x, pt.y) ? 'pointer' : '';
+  });
+  document.addEventListener('click', (e) => {
+    if (card.contains(/** @type {Node} */ (e.target))) {
+      return;
+    }
+    const pt = eventPoint(e);
+    const p = e.target === canvas ? personAt(pt.x, pt.y) : null;
+    const same = focus && focus.p === p;
+    unfocus();
+    if (p && !same) {
+      focus = { p, dir: p.dir };
+      lookAtViewer(p);
+      cardName.textContent = p.name;
+      card.hidden = false;
+      placeCard();
+    }
+  });
+  cardOpen.addEventListener('click', () => {
+    if (focus) {
+      openAgent(focus.p.id);
+    }
+    unfocus();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      unfocus();
+    }
+  });
+
+  // ======================================================================
   // Boucle
   // ======================================================================
   let last = performance.now();
@@ -1603,6 +1717,7 @@
         step(dt);
       }
       draw(now / 1000);
+      placeCard();
     }
     // En mode réduit, la scène est statique : une image par seconde suffit.
     if (reduced()) {
@@ -1631,7 +1746,7 @@
         const sw = document.createElement('span');
         sw.className = 'swatch';
         sw.setAttribute('aria-hidden', 'true');
-        const name = document.createElement('span');
+        const name = document.createElement(slot.agent ? 'button' : 'span');
         name.className = 'name';
         const state = document.createElement('span');
         state.className = 'state';
@@ -1646,6 +1761,9 @@
             sw.style.background = p.color;
           }
           name.textContent = a.name;
+          /** @type {HTMLButtonElement} */ (name).type = 'button';
+          name.title = `Edit ${a.name}'s agent file`;
+          name.addEventListener('click', () => openAgent(a.id));
           state.textContent = stateLabel(a.state) + (a.updatedAt ? ` · ${fmtTime(a.updatedAt)}` : '');
           if (a.runtime !== 'claude-code') {
             state.textContent += ` · ${a.runtime}`;

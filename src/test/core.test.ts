@@ -61,6 +61,7 @@ test('découverte : utilisateur + projet, le projet prime, dossiers absents igno
   assert.deepEqual(Object.keys(byId).sort(), ['claude-code:alpha', 'claude-code:beta', 'copilot:reviewer']);
   assert.equal(byId['claude-code:beta'].scope, 'project');
   assert.equal(byId['claude-code:beta'].color, 'green');
+  assert.equal(byId['claude-code:beta'].file, path.join(ws, '.claude/agents/b2.md'));
 });
 
 function claudeFixture() {
