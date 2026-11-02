@@ -4,6 +4,7 @@ import * as vscode from 'vscode';
 import { DEFAULT_AGENT, definitionSources, discoverDefinitions, withDefaultAgent } from './discovery/agentDefinitions';
 import { ClaudeCodeAdapter } from './runtime/claudeCode';
 import { readCopilot } from './runtime/copilot';
+import { ChristmasDecor, christmasDecor } from './state/season';
 import { buildSnapshot } from './state/snapshot';
 import { summarize } from './state/summary';
 import { OfficeSnapshot, RuntimeReport } from './types';
@@ -22,6 +23,7 @@ function config() {
     pinned: c.get<string[]>('pinnedAgents', []),
     rooms: c.get<Record<string, string>>('agentRooms', {}),
     showClaude: c.get<boolean>('showDefaultClaude', true),
+    christmas: c.get<ChristmasDecor>('christmasDecor', 'auto'),
   };
 }
 
@@ -125,7 +127,9 @@ class OfficeController implements vscode.WebviewViewProvider, vscode.Disposable 
     ];
     this.statusBar.text = `${icon} ${summary.text}`;
     this.statusBar.tooltip = 'Agent Office — which agent is working right now? (click to open the office)';
-    void this.view?.webview.postMessage({ type: 'snapshot', snapshot: this.snapshot, summary });
+    // Réévalué à chaque relevé : le décor apparaît et disparaît seul aux dates prévues.
+    const christmas = christmasDecor(config().christmas, new Date());
+    void this.view?.webview.postMessage({ type: 'snapshot', snapshot: this.snapshot, summary, christmas });
   }
 
   /** Ouvre la définition d'un agent. La vue ne donne qu'un identifiant : seul un fichier découvert peut être ouvert. */

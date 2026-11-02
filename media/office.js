@@ -182,6 +182,10 @@
   for (const p of OPEN_PLANTS) {
     block({ x: p.x, y: p.y, w: 1, h: 1 });
   }
+  /** Décor de Noël : cadeaux contre le mur droit de la grande salle, bonhomme de neige. Bloqués toute l'année. */
+  block({ x: 10, y: 16, w: 2, h: 7 });
+  const SNOWMAN_TILE = { x: 37, y: 24 };
+  block({ ...SNOWMAN_TILE, w: 1, h: 1 });
 
   const seatKeys = new Set(Object.values(STATIONS).map((s) => `${s.seat.x},${s.seat.y}`));
   const officeSeatKeys = new Set(Object.values(STATIONS).filter((s) => s.kind === 'office').map((s) => `${s.seat.x},${s.seat.y}`));
@@ -278,6 +282,8 @@
   /** @type {any} */
   let snapshot = null;
   let reduceMotionSetting = 'auto';
+  /** Décor de Noël, décidé par l'extension (réglage `agentOffice.christmasDecor` et date). */
+  let christmas = false;
   const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
   const reduced = () => reduceMotionSetting === 'on' || (reduceMotionSetting === 'auto' && mq.matches);
 
@@ -934,6 +940,9 @@
       ctx.fillRect(x + 1, Math.round(p.y) - 1, 10, 3);
     }
     ctx.drawImage(img, x, y);
+    if (christmas) {
+      ctx.drawImage(sprite(SANTA_HAT, SANTA_HAT_PAL, 'santa-hat', p.dir === 'left'), x, y - 4);
+    }
     p.hit = { x, y, w: 12, h: rows.length };
     // Priorité : bulle éclair, bulle ponctuelle de la scène, activité en cours, puis « au travail » dès que l'agent est actif.
     const bubble = (p.flash && p.flash.bubble) || p.bubble || p.activity || (p.state === 'active' ? 'work' : null);
@@ -1175,6 +1184,54 @@
     }
   }
 
+  // ---------- Décor de Noël : parties fixes (fond) ----------
+  const WINDOWS = [18, 120, 216];
+
+  /** Coin détente sous la neige : sol enneigé, traces de pas vers l'étang, étang gelé. */
+  function drawSnowGround() {
+    const x0 = ROOMS.lounge.x0 * T;
+    const y0 = ROOMS.lounge.y0 * T;
+    px(x0, y0, W - x0, H - y0, '#c9d6e8', g);
+    px(x0 + 1, y0 + 1, W - x0 - 1, H - y0 - 1, '#eef3fa', g);
+    for (let y = y0; y < H - 2; y += 4) {
+      for (let x = x0 + 1; x < W - 2; x += 4) {
+        const r = hash(`s${x},${y}`) % 25;
+        if (r < 3) {
+          px(x, y + 2, 3, 1, '#d5e0ee', g);
+        } else if (r === 3) {
+          px(x + 1, y, 1, 1, C.white, g);
+        }
+      }
+    }
+    for (const [sx, sy] of [[38, 13.4], [38.2, 15], [38, 16.8], [38.4, 18.6], [38.8, 20.2], [40.6, 20], [42.2, 20.6]]) {
+      px(sx * T + 2, sy * T + 2, 2, 3, '#c9d6e8', g);
+      px(sx * T + 5, sy * T + 4, 2, 3, '#c9d6e8', g);
+    }
+    const pd = LOUNGE.pond;
+    const X = pd.x * T;
+    const Y = pd.y * T;
+    const Wd = pd.w * T;
+    const Hd = pd.h * T;
+    px(X + 3, Y - 1, Wd - 6, Hd + 2, O, g);
+    px(X - 1, Y + 3, Wd + 2, Hd - 6, O, g);
+    px(X + 1, Y + 1, Wd - 2, Hd - 2, O, g);
+    px(X + 3, Y, Wd - 6, Hd, '#e3e9f2', g);
+    px(X, Y + 3, Wd, Hd - 6, '#e3e9f2', g);
+    px(X + 4, Y + 2, Wd - 8, Hd - 4, '#a9d6ef', g);
+    px(X + 2, Y + 4, Wd - 4, Hd - 8, '#a9d6ef', g);
+    px(X + 5, Y + 3, Wd - 10, 4, '#cdeaf8', g);
+    for (const [a, b, w, h] of [[10, 9, 9, 1], [18, 10, 1, 6], [26, 20, 10, 1], [30, 14, 1, 6], [12, 22, 6, 1]]) {
+      px(X + a, Y + b, w, h, C.white, g);
+    }
+  }
+
+  /** Fenêtre d'hiver : ciel gris-bleu et neige sur le rebord (les flocons sont animés à part). */
+  function winterWindow(/** @type {number} */ x) {
+    px(x + 2, 4, 22, 11, '#8fb6dd', g);
+    px(x + 2, 13, 22, 2, C.white, g);
+    px(x + 12, 3, 2, 13, C.wallCap, g);
+  }
+
   function drawStatic() {
     px(0, 0, W, H, '#c7cfdc', g);
     // Sols
@@ -1194,7 +1251,11 @@
     px(ROOMS.lounge.x0 * T, yb, (ROOMS.lounge.x1 - ROOMS.lounge.x0 + 1) * T, 1, C.tuft, g);
     px(ROOMS.lounge.x0 * T, yb, 1, H - yb, C.tuft, g);
 
-    drawNatureGround();
+    if (christmas) {
+      drawSnowGround();
+    } else {
+      drawNatureGround();
+    }
 
     // Façade : mur bleu clair, bandeau, plinthe
     px(0, 0, W, 14, C.wallTop, g);
@@ -1215,9 +1276,12 @@
       px(x + 3, 9, 4, 1, C.white, g);
       px(x + 15, 6, 3, 1, C.white, g);
     };
-    windowAt(18);
-    windowAt(120);
-    windowAt(216);
+    for (const x of WINDOWS) {
+      windowAt(x);
+      if (christmas) {
+        winterWindow(x);
+      }
+    }
     // Tableau (arbre) dans le bureau PM
     box(50, 4, 16, 14, '#8a5a3a', undefined, undefined, g);
     px(52, 6, 12, 10, '#9fd3f0', g);
@@ -1488,6 +1552,9 @@
     furniture.push({
       base: fy * T,
       draw: (time) => {
+        if (christmas) {
+          return; // sous la neige
+        }
         const sway = reduced() ? 0 : Math.round(Math.sin(time * 2 + fx));
         for (const [ox, oy, c] of [[2, 3, '#e2504f'], [5, 5, '#ffffff']]) {
           const X = fx * T + /** @type {number} */ (ox);
@@ -1562,8 +1629,17 @@
       },
     });
   }
+  /** Plante remplacée par le sapin de Noël pendant les fêtes. */
+  const TREE_SPOT = OPEN_PLANTS[1];
   for (const p of [...OPEN_PLANTS, ...BIG_PLANTS]) {
-    furniture.push({ base: (p.y + 1) * T, draw: () => ctx.drawImage(sprite(PLANT, PLANT_PAL, 'plant'), p.x * T - 2, p.y * T - 8) });
+    furniture.push({
+      base: (p.y + 1) * T,
+      draw: () => {
+        if (!(christmas && p === TREE_SPOT)) {
+          ctx.drawImage(sprite(PLANT, PLANT_PAL, 'plant'), p.x * T - 2, p.y * T - 8);
+        }
+      },
+    });
   }
   // Corbeilles de l'open space
   for (const [x, y] of BINS) {
@@ -1576,8 +1652,159 @@
     });
   }
 
+  // ======================================================================
+  // Décor de Noël : neige dehors, guirlandes dans les couloirs, sapin, cadeaux et bonnets
+  // ======================================================================
+  const WREATH = [
+    '...ooooo...', '..oGGgGGo..', '.oGgoooGGo.', 'oGGo...oGgo', 'oGo.....oRo', 'oRo.....oGo',
+    'oGgo...oGGo', '.oGGoooRgo.', '..oGrRrGo..', '...orRro...', '...oR.Ro...',
+  ];
+  const WREATH_PAL = { o: O, G: '#2f8a4a', g: '#5fc06a', R: C.red, r: '#ff8a8a' };
+  const XMAS_TREE = [
+    '.......YY.......', '......YyyY......', '.......oo.......', '......oLLo......', '.....oLrLLo.....', '....oLLLLbLo....',
+    '...ooLyLLLLoo...', '....oLLLLrLo....', '...oLbLLLLLLo...', '..oLLLLyLLbLLo..', '.oooLLLLLLLLooo.', '...oLrLLLbLLo...',
+    '..oLLLLyLLLLLo..', '.oLbLLLLLLrLLLo.', 'oLLLLLyLLLLLbLLo', 'oDLLLLLLLLLLLLDo', '.oDDLLLLLLLLDDo.', '..ooDDDDDDDDoo..',
+    '......oTTo......', '.....oTTTTo.....', '......oooo......',
+  ];
+  const XMAS_TREE_PAL = { o: O, L: '#3f9e55', D: '#2a7440', T: '#8a5a3a', Y: '#ffd23f', y: '#fff1a6', r: C.red, b: '#5aa2ff' };
+  const SNOWMAN = [
+    '...oooo...', '..oKKKKo..', '..oKKKKo..', '.oooooooo.', '..oWWWWo..', '.oWeWWeWo.', '.oWWNNWWo.', '..oRRRRo..',
+    '.oWWWRWWWo', 'oWWWWWWWWo', 'oWWWWWWWWo', 'oWWWKWWWWo', '.oWWWWWWo.', '..oooooo..',
+  ];
+  const SNOWMAN_PAL = { o: O, K: '#3a3550', W: C.white, e: O, N: '#f08a3c', R: C.red };
+  const SANTA_HAT = ['........WW..', '......orrW..', '....orrrrro.', '...orrrrrrro', '..orrrrrrrro', '.oWWWWWWWWWo', '.oWWWWWWWWWo'];
+  const SANTA_HAT_PAL = { o: O, r: '#e0343f', W: C.white };
+  const BULBS = ['#ff4d5e', '#4fd16e', '#ffd23f', '#5aa2ff'];
+
+  /** Haut de chaque étage de feuillage d'un sprite : là où la neige se pose. */
+  const snowEdges = (/** @type {string[]} */ rows) =>
+    rows.flatMap((row, y) =>
+      [...row].flatMap((c, x) => ('LlD'.includes(c) && (y === 0 || '.o'.includes(rows[y - 1][x])) ? [[x, y]] : [])),
+    );
+  const TREE_SNOW = snowEdges(TREE);
+  const BUSH_SNOW = snowEdges(BUSH);
+
+  function gift(/** @type {number} */ x, /** @type {number} */ y, /** @type {number} */ w, /** @type {number} */ h, /** @type {string} */ fill, /** @type {string} */ ribbon) {
+    box(x, y, w, h, fill);
+    const mid = x + Math.floor(w / 2);
+    px(mid - 1, y + 1, 2, h - 2, ribbon);
+    px(x + 1, y + 3, w - 2, 1, ribbon);
+    px(mid - 3, y - 1, 2, 2, ribbon);
+    px(mid + 1, y - 1, 2, 2, ribbon);
+  }
+
+  /** Flocons qui tombent dans une zone ; immobiles quand les animations sont réduites. */
+  function snowfall(/** @type {number} */ t, /** @type {Rect} */ area, /** @type {number} */ n, /** @type {number} */ seed) {
+    const tt = reduced() ? 0 : t;
+    for (let i = 0; i < n; i++) {
+      const r1 = (hash(`x${seed},${i}`) % 1000) / 1000;
+      const r2 = (hash(`y${seed},${i}`) % 1000) / 1000;
+      const y = area.y + ((r2 * area.h + tt * (6 + r2 * 8)) % area.h);
+      const x = area.x + ((r1 * area.w + Math.sin(tt * 0.8 + i) * 2 + area.w) % area.w);
+      const size = i % 4 === 0 ? 2 : 1;
+      px(x, y, size, size, 'rgba(255, 255, 255, 0.9)');
+    }
+  }
+
+  /** Guirlande lumineuse le long d'un mur côté couloir (pas devant les portes). */
+  function garland(/** @type {number} */ t, /** @type {number} */ row, /** @type {number} */ x1) {
+    const y = row * T;
+    const onWall = (/** @type {number} */ x) => !free(Math.floor(x / T), row);
+    const sag = (/** @type {number} */ x) => Math.round(Math.sin(((x % 24) / 24) * Math.PI));
+    for (let x = 0; x < x1; x++) {
+      if (onWall(x)) {
+        px(x, y + sag(x), 1, 1, '#2f5b3a');
+      }
+    }
+    for (let x = 3, i = 0; x < x1 - 1; x += 6, i++) {
+      if (!onWall(x)) {
+        continue;
+      }
+      const c = BULBS[i % BULBS.length];
+      const on = reduced() || (Math.floor(t * 2) + i) % 3 !== 0;
+      px(x, y + sag(x) + 1, 2, 3, on ? c : '#6b6f7e');
+      if (on) {
+        ctx.fillStyle = `${c}55`;
+        ctx.fillRect(x - 1, y + sag(x), 4, 5);
+        px(x, y + sag(x) + 1, 1, 1, C.white);
+      }
+    }
+  }
+
+  /** Sous le mobilier : guirlandes et neige derrière les fenêtres. */
+  function drawChristmasBack(/** @type {number} */ t) {
+    garland(t, TOP_WALL, W);
+    garland(t, BIG_WALL, BIG_PARTITION * T);
+    for (const x of WINDOWS) {
+      snowfall(t, { x: x + 2, y: 4, w: 22, h: 9 }, 6, x);
+    }
+  }
+
+  /** Au premier plan (sous les bulles) : neige qui tombe sur le coin détente. */
+  function drawChristmasFront(/** @type {number} */ t) {
+    const x = ROOMS.lounge.x0 * T + 1;
+    const y = ROOMS.lounge.y0 * T + 1;
+    snowfall(t, { x, y, w: W - x - 1, h: H - y - 1 }, 46, 1);
+  }
+
+  /** Éléments de Noël triés par profondeur avec le mobilier et les personnages. */
+  const xmas = (/** @type {number} */ base, /** @type {(t:number) => void} */ fn) =>
+    furniture.push({ base, draw: (t) => christmas && fn(t) });
+  for (const x of WINDOWS) {
+    xmas(1, () => ctx.drawImage(sprite(WREATH, WREATH_PAL, 'wreath'), x + 8, 4));
+  }
+  // Sapin décoré de l'open space et ses cadeaux
+  xmas((TREE_SPOT.y + 1) * T + 0.2, () => {
+    const x = TREE_SPOT.x * T - 4;
+    const y = (TREE_SPOT.y + 1) * T;
+    ctx.fillStyle = 'rgba(43, 34, 54, 0.2)';
+    ctx.fillRect(x, y - 3, 16, 3);
+    ctx.drawImage(sprite(XMAS_TREE, XMAS_TREE_PAL, 'xmas-tree'), x, y - XMAS_TREE.length);
+  });
+  xmas((TREE_SPOT.y + 1) * T + 0.3, () => {
+    gift(226, 106, 7, 6, C.red, C.yellow);
+    gift(232, 108, 6, 5, '#5aa2ff', C.white);
+    gift(250, 108, 6, 5, '#4fb06a', C.red);
+  });
+  // Cadeaux contre le mur droit de la grande salle
+  /** @type {[number, number, number, number, string, string][]} */
+  const BIG_ROOM_GIFTS = [
+    [82, 135, 12, 9, C.red, C.yellow], [84, 129, 8, 7, '#5aa2ff', C.white],
+    [83, 152, 10, 8, '#4fb06a', C.red], [91, 154, 6, 6, C.yellow, C.red],
+    [82, 166, 12, 10, C.purple, C.yellow], [85, 160, 7, 6, C.red, C.white],
+    [86, 177, 9, 7, '#5aa2ff', C.yellow],
+  ];
+  for (const [x, y, w, h, fill, ribbon] of BIG_ROOM_GIFTS) {
+    xmas(y + h + (h < 8 ? 0.1 : 0), () => gift(x, y, w, h, fill, ribbon));
+  }
+  // Neige sur les sapins et les buissons, bonhomme de neige
+  for (const tr of LOUNGE.trees) {
+    xmas((tr.y + 2) * T + 0.1, () => {
+      for (const [x, y] of TREE_SNOW) {
+        px(tr.x * T + x, (tr.y + 2) * T - 28 + y, 1, 2, C.white);
+      }
+    });
+  }
+  for (const bu of LOUNGE.bushes) {
+    xmas((bu.y + 1) * T + 0.1, () => {
+      for (const [x, y] of BUSH_SNOW) {
+        px(bu.x * T - 1 + x, bu.y * T + 1 + y, 1, 2, C.white);
+      }
+    });
+  }
+  xmas((SNOWMAN_TILE.y + 1) * T, () => {
+    const x = SNOWMAN_TILE.x * T;
+    const y = (SNOWMAN_TILE.y + 1) * T;
+    ctx.fillStyle = 'rgba(43, 34, 54, 0.18)';
+    ctx.fillRect(x + 1, y - 2, 10, 3);
+    ctx.drawImage(sprite(SNOWMAN, SNOWMAN_PAL, 'snowman'), x - 1, y - SNOWMAN.length);
+  });
+
   function draw(/** @type {number} */ t) {
     ctx.drawImage(bg, 0, 0);
+    if (christmas) {
+      drawChristmasBack(t);
+    }
     /** @type {(() => void)[]} */
     const bubbles = [];
     const items = [
@@ -1599,6 +1826,9 @@
     items.sort((a, b) => a.base - b.base);
     for (const it of items) {
       it.draw(t);
+    }
+    if (christmas) {
+      drawChristmasFront(t);
     }
     for (const b of bubbles) {
       b();
@@ -1811,6 +2041,10 @@
   window.addEventListener('message', (event) => {
     const msg = event.data;
     if (msg && msg.type === 'snapshot') {
+      if (!!msg.christmas !== christmas) {
+        christmas = !!msg.christmas;
+        drawStatic(); // le fond (neige, fenêtres d'hiver) change avec la saison
+      }
       snapshot = msg.snapshot;
       sync();
       renderText(msg.summary);

@@ -24,6 +24,7 @@ A tiny pixel-art office inside VS Code. When one of your Claude Code agents star
 - **Live status**: see which agent is working, idle or in an unknown state, refreshed every 2 seconds.
 - **Real delegations**: visits, meetings and hand-ins are triggered by what your agents actually do.
 - **Zero setup**: agents, desks and colors are detected automatically.
+- **Christmas decorations** from December 1 to January 6: snow outside the windows and on the lounge, garlands in the corridors, a Christmas tree, presents and Santa hats.
 - **Claude itself has a desk**: when you talk to Claude Code without a custom agent, a **Claude** character works, delegates to your agents, and shows the model it's using (e.g. Opus 5.5). No custom agent needed to see the office come alive.
 - **Edit an agent in one click**: click a character, it turns to face you, and **Edit agent file** opens its `.md` in the editor. Restart Claude Code to apply your changes.
 - **Private by design**: 100% local and read-only. No code, prompt or conversation is ever displayed.
@@ -194,6 +195,7 @@ Everything works out of the box. To customize, open VS Code Settings and search 
 |---|---|---|
 | `agentOffice.agentRooms` | `{}` | Force an agent's desk, e.g. `{ "my-agent": "design" }` (`pm`, `challenger`, `design` or `engineering`) |
 | `agentOffice.pinnedAgents` | `[]` | Agents shown first when you have more than 10 |
+| `agentOffice.christmasDecor` | `auto` | Christmas decorations: `auto` (December 1 to January 6), `on` or `off` |
 | `agentOffice.showDefaultClaude` | `true` | Show the **Claude** character for sessions started without a custom agent |
 | `agentOffice.pollIntervalSeconds` | `2` | Refresh interval, in seconds |
 

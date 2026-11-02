@@ -7,6 +7,7 @@ import { DEFAULT_AGENT, definitionSources, discoverDefinitions, parseFrontmatter
 import { ClaudeCodeAdapter, modelLabel, projectDirName } from '../runtime/claudeCode';
 import { readCopilot } from '../runtime/copilot';
 import { normalize } from '../state/normalize';
+import { christmasDecor } from '../state/season';
 import { roleOf } from '../state/placement';
 import { assignSlots } from '../state/slots';
 import { buildSnapshot } from '../state/snapshot';
@@ -293,6 +294,17 @@ test('délégations : lancement et fin réels, transmises seulement entre agents
   assert.deepEqual(snap.interactions.map((i) => i.to).sort(), ['qa-engineer', 'tech-lead']);
   const pm = snap.slots.find((s) => s.agent?.name === 'product-manager');
   assert.equal(pm?.agent?.state, 'inactive');
+});
+
+test('décor de Noël : du 1er décembre au 6 janvier en auto, forcé sinon', () => {
+  const on = (iso: string) => christmasDecor('auto', new Date(`${iso}T12:00:00`));
+  assert.equal(on('2026-11-30'), false);
+  assert.equal(on('2026-12-01'), true);
+  assert.equal(on('2026-12-31'), true);
+  assert.equal(on('2027-01-06'), true);
+  assert.equal(on('2027-01-07'), false);
+  assert.equal(christmasDecor('on', new Date('2026-07-14T12:00:00')), true);
+  assert.equal(christmasDecor('off', new Date('2026-12-25T12:00:00')), false);
 });
 
 test('résumé : un, plusieurs, aucun, inconnu, source indisponible', () => {

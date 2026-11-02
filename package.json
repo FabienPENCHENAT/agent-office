@@ -87,6 +87,21 @@
           "default": true,
           "description": "Shows a \"Claude\" character for Claude Code sessions started without --agent (your conversations with Claude itself), with the model it uses."
         },
+        "agentOffice.christmasDecor": {
+          "type": "string",
+          "default": "auto",
+          "enum": [
+            "auto",
+            "on",
+            "off"
+          ],
+          "enumDescriptions": [
+            "From December 1 to January 6",
+            "All year round",
+            "Never"
+          ],
+          "description": "Christmas decorations in the office: snow outside, garlands, a Christmas tree, presents and Santa hats."
+        },
         "agentOffice.agentRooms": {
           "type": "object",
           "default": {},

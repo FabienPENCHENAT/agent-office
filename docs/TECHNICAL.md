@@ -35,6 +35,15 @@ Bubbles are always drawn on top of everything else. A character sitting on the s
 
 Delegation scenes (visit, meeting, hand-in) are triggered **only** by an observed subagent launch or finish. Their duration and staging are illustrative. A scene only plays for a recent delegation (less than 90 seconds old): when the panel opens, old delegations are not replayed.
 
+## Christmas decorations
+
+From December 1 to January 6 (local date), the office is decorated. The `agentOffice.christmasDecor` setting can force them all year (`on`) or turn them off (`off`); the default is `auto`. The extension checks the date at every refresh, so the decorations appear and disappear on their own.
+
+- **Outside**: snow falls behind the windows, which also get a holly wreath. The lounge is under snow: frozen pond, snow-capped fir trees and bushes, a snowman, falling snowflakes. The wildflowers are hidden.
+- **Indoors**: string lights on the corridor-side walls (not on the façade of the top rooms), a decorated Christmas tree with presents in place of the open-space plant at the lounge side, a pile of presents along the right wall of the large meeting room, and a Santa hat on every character.
+
+The presents and the snowman always occupy their tiles, decorated or not, so paths don't change with the season. In reduced-motion mode, the lights stay on and the snow stops falling.
+
 ## Editing an agent
 
 Click a character: it stops and turns to face you, and a card shows its name with an **Edit agent file** link. The link opens the agent's definition (`.md`) in the editor; Claude Code only picks up the change in a new session. Clicking elsewhere or pressing `Escape` closes the card, and the character resumes what it was doing. Names in the list below the office open the file too (keyboard access). The **Claude** character has no file: its card only shows its name and model.
