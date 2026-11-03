@@ -82,6 +82,54 @@ canvas {
 .agent-card__open:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 1px; }
 .agent-card__hint { font-size: 0.85em; color: var(--vscode-descriptionForeground); }
 
+/* Roue crantée et panneau des réglages, en haut à droite de la scène. */
+.gear {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 2;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  font-size: 17px;
+  line-height: 26px;
+  color: #fff;
+  background: rgba(43, 34, 54, 0.55);
+  cursor: pointer;
+}
+.gear:hover, .gear[aria-expanded="true"] { background: rgba(43, 34, 54, 0.85); }
+.gear:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 1px; }
+.settings {
+  position: absolute;
+  top: 36px;
+  right: 6px;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: min(260px, calc(100% - 12px));
+  padding: 8px 10px;
+  border-radius: 4px;
+  color: var(--vscode-editorWidget-foreground, var(--vscode-foreground));
+  background: var(--vscode-editorWidget-background, #252526);
+  box-shadow: 0 0 0 2px #2b2236, 0 3px 0 2px rgba(43, 34, 54, 0.35);
+}
+.settings[hidden] { display: none; }
+.settings__row { display: flex; align-items: center; justify-content: space-between; gap: 8px; cursor: pointer; }
+.settings__row select {
+  font: inherit;
+  padding: 1px 4px;
+  color: var(--vscode-dropdown-foreground, var(--vscode-foreground));
+  background: var(--vscode-dropdown-background, var(--vscode-editor-background));
+  border: 1px solid var(--vscode-dropdown-border, rgba(128, 128, 128, 0.45));
+  border-radius: 2px;
+}
+.settings__row input { margin: 0; accent-color: var(--vscode-focusBorder); }
+.settings__row select:focus-visible, .settings__row input:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 1px; }
+.settings__hint { margin: -4px 0 2px; font-size: 0.85em; color: var(--vscode-descriptionForeground); }
+
 /* Liste textuelle des dix emplacements (lisible par les lecteurs d'écran). */
 .roster {
   list-style: none;

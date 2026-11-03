@@ -297,7 +297,7 @@
   /** @type {any} */
   let snapshot = null;
   let reduceMotionSetting = 'auto';
-  /** Décor de Noël, décidé par l'extension (réglage `agentOffice.christmasDecor` et date). */
+  /** Décor d'hiver, décidé par l'extension (réglage `agentOffice.seasonalDecor` et date). */
   let christmas = false;
   const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
   const reduced = () => reduceMotionSetting === 'on' || (reduceMotionSetting === 'auto' && mq.matches);
@@ -2107,6 +2107,137 @@
   card.append(cardName, cardOpen, cardHint);
   scene.appendChild(card);
 
+  // ======================================================================
+  // Roue crantée : les quelques réglages utiles, sans passer par les paramètres
+  // ======================================================================
+  const gear = document.createElement('button');
+  gear.type = 'button';
+  gear.className = 'gear';
+  gear.textContent = '\u2699\uFE0E';
+  gear.title = 'Office settings';
+  gear.setAttribute('aria-label', 'Office settings');
+  gear.setAttribute('aria-expanded', 'false');
+  const panel = document.createElement('div');
+  panel.className = 'settings';
+  panel.hidden = true;
+  panel.setAttribute('role', 'dialog');
+  panel.setAttribute('aria-label', 'Office settings');
+
+  /** Crée une ligne du panneau ; `read` convertit la valeur du contrôle dans le type du réglage. */
+  function settingRow(/** @type {string} */ label, /** @type {HTMLSelectElement | HTMLInputElement} */ control, /** @type {string} */ key, /** @type {(c: any) => unknown} */ read) {
+    const row = document.createElement('label');
+    row.className = 'settings__row';
+    const text = document.createElement('span');
+    text.textContent = label;
+    control.dataset.key = key;
+    control.addEventListener('change', () => {
+      pendingSetting.set(key, Date.now());
+      vscode.postMessage({ type: 'setSetting', key, value: read(control) });
+    });
+    row.append(text, control);
+    panel.appendChild(row);
+    return control;
+  }
+  function select(/** @type {[string, string][]} */ options) {
+    const sel = document.createElement('select');
+    for (const [value, label] of options) {
+      const o = document.createElement('option');
+      o.value = value;
+      o.textContent = label;
+      sel.appendChild(o);
+    }
+    return sel;
+  }
+  function checkbox() {
+    const box = document.createElement('input');
+    box.type = 'checkbox';
+    return box;
+  }
+  function settingHint() {
+    const hint = document.createElement('p');
+    hint.className = 'settings__hint';
+    panel.appendChild(hint);
+    return hint;
+  }
+  /** Réglage tout juste changé → moment du changement : un relevé plus ancien ne remet pas l'ancienne valeur. */
+  const pendingSetting = new Map();
+  const SILENCE_CHOICES = [5, 10, 20, 60];
+  const scopeSelect = /** @type {HTMLSelectElement} */ (
+    settingRow('Sessions shown', select([['project', 'This project'], ['all', 'All projects']]), 'sessionScope', (c) => c.value)
+  );
+  const scopeHint = settingHint();
+  const claudeBox = /** @type {HTMLInputElement} */ (settingRow('Show Claude', checkbox(), 'showDefaultClaude', (c) => c.checked));
+  const silenceSelect = /** @type {HTMLSelectElement} */ (
+    settingRow('Grey after', select(SILENCE_CHOICES.map((m) => [String(m), `${m} min`])), 'subagentSilenceMinutes', (c) => Number(c.value))
+  );
+  settingHint().textContent = 'A silent subagent turns grey with a “?”.';
+  const seasonBox = /** @type {HTMLInputElement} */ (settingRow('Seasonal decor', checkbox(), 'seasonalDecor', (c) => c.checked));
+  scene.append(gear, panel);
+
+  function showSettings(/** @type {boolean} */ open) {
+    panel.hidden = !open;
+    gear.setAttribute('aria-expanded', String(open));
+  }
+  gear.addEventListener('click', () => showSettings(panel.hidden));
+  document.addEventListener('click', (e) => {
+    const t = /** @type {Node} */ (e.target);
+    if (!panel.hidden && !panel.contains(t) && !gear.contains(t)) {
+      showSettings(false);
+    }
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !panel.hidden) {
+      showSettings(false);
+      gear.focus();
+    }
+  });
+
+  /** Dossiers dont les sessions sont montrées (absent : toutes les sessions). */
+  /** @type {string[] | undefined} */
+  let sessionScope;
+  const folderLabel = (/** @type {string[]} */ dirs) => dirs.map((d) => d.split(/[\\/]/).filter(Boolean).pop() || d).join(', ');
+
+  /** Reporte dans le panneau les réglages du dernier relevé, sauf ceux que l'utilisateur vient de changer. */
+  function renderSettings(/** @type {any} */ settings, /** @type {string[] | undefined} */ scope) {
+    sessionScope = scope;
+    if (!settings) {
+      return;
+    }
+    const fresh = (/** @type {string} */ key) => {
+      const at = pendingSetting.get(key);
+      if (at !== undefined && Date.now() - at < 3000) {
+        return false;
+      }
+      pendingSetting.delete(key);
+      return true;
+    };
+    if (fresh('sessionScope')) {
+      scopeSelect.value = settings.sessionScope;
+    }
+    if (fresh('showDefaultClaude')) {
+      claudeBox.checked = settings.showDefaultClaude;
+    }
+    if (fresh('subagentSilenceMinutes')) {
+      // Une valeur choisie dans les réglages (hors de la liste) reste affichée.
+      const minutes = String(settings.subagentSilenceMinutes);
+      if (!Array.from(silenceSelect.options).some((o) => o.value === minutes)) {
+        const o = document.createElement('option');
+        o.value = minutes;
+        o.textContent = `${minutes} min`;
+        silenceSelect.appendChild(o);
+      }
+      silenceSelect.value = minutes;
+    }
+    if (fresh('seasonalDecor')) {
+      seasonBox.checked = settings.seasonalDecor;
+    }
+    scopeHint.textContent = scope
+      ? `Only sessions started in ${folderLabel(scope)}. Your own agents are always shown.`
+      : settings.sessionScope === 'project'
+        ? 'No folder open: every session is shown.'
+        : 'Every Claude Code session on this machine.';
+  }
+
   function lookAtViewer(/** @type {any} */ p) {
     p.dir = 'down';
     if (p.pose === 'walk') {
@@ -2279,6 +2410,9 @@
       const waiting = snapshot.helperOverflow ? ` ${snapshot.helperOverflow} more waiting behind the door.` : '';
       lines.push(`${helpers.length} subagent(s) at work as mini-bots: ${names}.${waiting}`);
     }
+    if (sessionScope) {
+      lines.push(`Showing Claude Code sessions from ${folderLabel(sessionScope)} only (⚙ to show all projects).`);
+    }
     for (const h of snapshot.health) {
       if (h.message) {
         lines.push(h.message);
@@ -2308,6 +2442,7 @@
       }
       snapshot = msg.snapshot;
       sync();
+      renderSettings(msg.settings, msg.scope);
       renderText(msg.summary);
     } else if (msg && msg.type === 'motion') {
       reduceMotionSetting = msg.reduceMotion;

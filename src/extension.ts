@@ -1,12 +1,19 @@
 import * as vscode from 'vscode';
 import { OfficeEngine, OfficeUpdate } from './core/engine';
-import { OfficeSettings, resolveSettings } from './core/settings';
+import { OfficeSettings, panelSetting, resolveSettings } from './core/settings';
 import { officeHtml } from './view/officeHtml';
 
 type ReduceMotion = 'on' | 'off' | 'auto';
 
 function config(): OfficeSettings {
-  return resolveSettings(vscode.workspace.getConfiguration('agentOffice') as unknown as Record<string, unknown>);
+  const conf = vscode.workspace.getConfiguration('agentOffice');
+  const raw: Record<string, unknown> = { ...(conf as unknown as Record<string, unknown>) };
+  // VS Code donne toujours la valeur par défaut : sans `seasonalDecor` défini, l'ancien `christmasDecor: "off"` compte.
+  const seasonal = conf.inspect('seasonalDecor');
+  if ([seasonal?.globalValue, seasonal?.workspaceValue, seasonal?.workspaceFolderValue].every((v) => v === undefined)) {
+    delete raw.seasonalDecor;
+  }
+  return resolveSettings(raw);
 }
 
 function reduceMotion(): ReduceMotion {
@@ -73,6 +80,30 @@ class OfficeController implements vscode.WebviewViewProvider, vscode.Disposable 
     }
   }
 
+  /**
+   * Enregistre un réglage changé dans la roue crantée de l'office. Il est écrit là où il est déjà défini
+   * (dossier ou espace de travail), sinon dans les réglages de l'utilisateur.
+   */
+  private async setSetting(key: unknown, value: unknown): Promise<void> {
+    const setting = panelSetting(key, value);
+    if (!setting) {
+      return;
+    }
+    const conf = vscode.workspace.getConfiguration('agentOffice');
+    const where = conf.inspect(setting.key);
+    const target =
+      where?.workspaceFolderValue !== undefined
+        ? vscode.ConfigurationTarget.WorkspaceFolder
+        : where?.workspaceValue !== undefined
+          ? vscode.ConfigurationTarget.Workspace
+          : vscode.ConfigurationTarget.Global;
+    try {
+      await conf.update(setting.key, setting.value, target);
+    } catch (err) {
+      void vscode.window.showErrorMessage(`Agent Office: cannot save ${setting.key} (${String(err)})`);
+    }
+  }
+
   private postMotion(): void {
     void this.view?.webview.postMessage({ type: 'motion', reduceMotion: reduceMotion() });
   }
@@ -90,6 +121,8 @@ class OfficeController implements vscode.WebviewViewProvider, vscode.Disposable 
         this.render();
       } else if (msg?.type === 'openAgent') {
         void this.openAgent(msg.id);
+      } else if (msg?.type === 'setSetting') {
+        void this.setSetting(msg.key, msg.value);
       }
     });
     view.onDidDispose(() => {
