@@ -32,7 +32,7 @@ The visual idea is inspired by [Pixel Agents](https://github.com/pixel-agents-hq
 | An agent is idle | **Real** for the status; **decorative** for the activity | Free routine: hammock, bench by the pond, pond side, chat for two, stroll. |
 | An agent **waits for you** | **Real**: session `waiting` (a permission or a question), or a subagent of that session silent for 30 s | It sits at its desk, in color, with an amber “raised hand” bubble. Its card says *“Waiting for your answer in Claude Code.”* The status bar reads *“Waiting for you: …”*, and on macOS the desktop app's Dock badge shows “!”. A mini-bot does the same at its place. This state comes before working and unknown. |
 | The status is unknown | Inconclusive signal or unavailable source | The character stops and turns grey, with a “?” bubble. |
-| A subagent is **dismissed** | **User action** on any subagent instance not waiting for an answer (see below) | A “!” bubble, then it stands up, turns to face you, and a cardboard box pops up in its hands in a puff of dust, with a plant and a red mug sticking out. With a sweat drop, it hurries (and hops) to the doormat and out the door. A mini-bot is gone for good. An agent's character stays grey until it's outside, then walks back in empty-handed, in color, has a coffee and resumes its idle routine. |
+| A stuck subagent is **dismissed** | **User action** on a grey subagent instance, not waiting for an answer (see below) | A “!” bubble, then it stands up, turns to face you, and a cardboard box pops up in its hands in a puff of dust, with a plant and a red mug sticking out. With a sweat drop, it hurries (and hops) to the doormat and out the door. A mini-bot is gone for good. An agent's character stays grey until it's outside, then walks back in empty-handed, in color, has a coffee and resumes its idle routine. |
 
 Bubbles are always drawn on top of everything else. A character sitting on the side of a meeting table is drawn in front of the table.
 
@@ -55,13 +55,12 @@ Click a character: it stops and turns to face you, and a card shows its name wit
 
 The file path stays in the extension: the view only sends back the agent's identifier, and only a file found during discovery can be opened.
 
-## Dismissing a subagent
+## Dismissing a stuck subagent
 
-A subagent that is interrupted (`Esc`, an error, a session that moves on) may never be marked `finished`. It then stays “working”, then “unknown” after `subagentSilenceMinutes` of silence, until it expires after 6 hours of silence. Subagents run inside their session's Claude Code process, so there is nothing to stop on their own: the office only offers to **hide** them. The user decides when: there is no delay.
+A subagent that is interrupted (`Esc`, an error, a session that moves on) may never be marked `finished`. It then stays “working”, then “unknown” after `subagentSilenceMinutes` of silence, until it expires after 6 hours of silence. Subagents run inside their session's Claude Code process, so there is nothing to stop on their own: the office only offers to **hide** them. 
 
-- **When**: the card shows **Dismiss from office** on any mini-bot, and **Dismiss subagent run** (or *Dismiss N subagent runs*) on a character that has subagent instances (`AgentStatus.dismissableRuns`). An instance **waiting for an answer** never offers it, nor does a character in that state. A main session (started with `--agent`, or the Claude character) is not a subagent and can't be dismissed.
-- **How**: the view sends `{ type: 'dismiss', ids }` with the instance identifiers (`<sessionId>/<subagent file>`, also carried by each subagent signal as `runId`). `OfficeEngine.dismiss` only accepts identifiers of the last refresh that aren't waiting for an answer, then refreshes at once.
-- A dismissed instance that is still working stays hidden until it finishes; its delegation hand-in still plays. `state/dismiss.ts` removes those instances' signals and mini-bots from every following report, so the status bar, the legend and the office agree.
+- **When**: as soon as an instance is grey (unknown, after `subagentSilenceMinutes` of silence) and not waiting for an answer, with no other condition. The card shows **Dismiss from office** on such a mini-bot, and **Dismiss stuck run** (or *Dismiss N stuck runs*) on a character that is grey only because of silent subagent instances (`AgentStatus.dismissableRuns`). A working instance, an instance or character **waiting for an answer**, and a main session (started with `--agent`, or the Claude character) never offer it.
+- **How**: the view sends `{ type: 'dismiss', ids }` with the instance identifiers (`<sessionId>/<subagent file>`, also carried by each subagent signal as `runId`). `OfficeEngine.dismiss` only accepts identifiers that were grey at the last refresh, then refreshes at once. `state/dismiss.ts` removes those instances' signals and mini-bots from every following report, so the status bar, the legend and the office agree.
 - **How long**: in memory, per engine (VS Code window or desktop window). An instance is forgotten once it leaves the report (finished or expired), and a dismissed instance reappears after a restart if it is still in the report.
 - Claude Code is never touched: no file is written, no process is signalled.
 
@@ -160,7 +159,7 @@ Example setting:
 - Data stays **100% local**: no network request, neither in the extension nor in the Webview.
 - The Webview uses a strict CSP: `default-src 'none'`, a single local script with a nonce, local styles and images only.
 - The Webview only receives names, statuses, desks, colors and timestamps.
-- The extension never writes to any Claude Code configuration, session or agent file (it can open an agent's file in the editor; you make the edits). It only writes its own settings (`agentOffice.*`, or the desktop app's `settings.json`) when you change them in the ⚙ panel, and only the four keys and values the panel offers. It doesn't start, stop or control any agent, and can't create one. Dismissing a subagent only filters it out of the office's own display.
+- The extension never writes to any Claude Code configuration, session or agent file (it can open an agent's file in the editor; you make the edits). It only writes its own settings (`agentOffice.*`, or the desktop app's `settings.json`) when you change them in the ⚙ panel, and only the four keys and values the panel offers. It doesn't start, stop or control any agent, and can't create one. Dismissing a stuck subagent only filters it out of the office's own display.
 
 ## Limits
 

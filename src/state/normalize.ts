@@ -25,8 +25,10 @@ export function normalize(definitions: AgentDefinition[], reports: RuntimeReport
     const relevant = signals.filter((s) => (state === 'active' || state === 'waiting' ? s.state === state : true));
     const recent = [...relevant].sort((a, b) => b.observedAt - a.observedAt);
     const model = recent.find((s) => s.model)?.model;
-    // Instances de sous-agents que l'utilisateur peut retirer du bureau, sauf quand l'agent attend sa réponse.
-    const dismissableRuns = state === 'waiting' ? [] : signals.flatMap((s) => (s.runId ? [s.runId] : []));
+    // Gris à cause de sous-agents silencieux (et pas en attente d'une réponse) : ces instances peuvent être retirées.
+    const unknown = signals.filter((s) => s.state === 'unknown');
+    const dismissableRuns =
+      state === 'unknown' && unknown.length && unknown.every((s) => s.runId) ? unknown.map((s) => s.runId as string) : [];
     return {
       id: def.id,
       name: def.name,

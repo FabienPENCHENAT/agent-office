@@ -468,7 +468,7 @@ test('standalone recents: most recent first, no duplicates, bounded, removable, 
   assert.deepEqual(readState(file), { recents: [] });
 });
 
-test('retirer du bureau : toute instance de sous-agent, sauf quand l\'agent attend une réponse', () => {
+test('retirer du bureau : dès qu\'un agent est gris à cause de sous-agents, jamais s\'il attend une réponse', () => {
   const sig = (agentName: string, state: 'active' | 'idle' | 'waiting' | 'unknown', runId?: string) => ({
     runtime: 'claude-code' as const,
     agentName,
@@ -476,24 +476,28 @@ test('retirer du bureau : toute instance de sous-agent, sauf quand l\'agent atte
     observedAt: NOW,
     ...(runId ? { runId } : {}),
   });
-  const [lead, pm, qa, ux] = normalize(
-    [def('tech-lead'), def('pm'), def('qa'), def('ux')],
+  const [lead, pm, qa, ux, dev] = normalize(
+    [def('tech-lead'), def('pm'), def('qa'), def('ux'), def('dev')],
     [
       okClaude([
         sig('tech-lead', 'unknown', 's/a'),
-        sig('tech-lead', 'active', 's/b'),
-        sig('pm', 'active'), // session principale : rien à retirer
+        sig('tech-lead', 'unknown', 's/b'),
+        sig('pm', 'unknown', 's/c'),
+        sig('pm', 'unknown'), // session principale non concluante : rien à retirer
+        sig('qa', 'unknown', 's/d'),
+        sig('qa', 'active', 's/e'), // au travail, donc pas gris
         sig('ux', 'waiting', 's/g'),
-        sig('ux', 'active', 's/h'),
+        sig('ux', 'unknown', 's/h'), // attend une réponse : jamais retirable
+        sig('dev', 'active', 's/i'),
       ]),
     ],
   );
   assert.deepEqual(lead.dismissableRuns, ['s/a', 's/b']);
   assert.equal(pm.dismissableRuns, undefined);
   assert.equal(qa.dismissableRuns, undefined);
-  // Attendre l'utilisateur prime sur tout le reste, et n'est jamais retirable.
   assert.equal(ux.state, 'waiting');
   assert.equal(ux.dismissableRuns, undefined);
+  assert.equal(dev.dismissableRuns, undefined);
 
   const report: RuntimeReport = {
     ...okClaude([sig('tech-lead', 'unknown', 's/a'), sig('tech-lead', 'idle')]),
@@ -505,7 +509,7 @@ test('retirer du bureau : toute instance de sous-agent, sauf quand l\'agent atte
   assert.equal(withoutDismissed(report, new Set()), report);
 });
 
-test('retirer du bureau : le moteur refuse les instances en attente et oublie celles qui finissent', async () => {
+test('retirer du bureau : le moteur n\'accepte que des instances grises et oublie celles qui finissent', async () => {
   const { dir, proj, session } = claudeFixture();
   const now = Date.now();
   session(process.pid, 's1', 'idle');
@@ -538,10 +542,10 @@ test('retirer du bureau : le moteur refuse les instances en attente et oublie ce
   assert.deepEqual(lead()?.dismissableRuns, ['s1/agent-a']);
   assert.deepEqual(last?.snapshot.helpers.map((h) => h.id).sort(), ['s1/agent-b', 's1/agent-c', 's2/agent-w']);
 
-  // Une instance qui attend l'utilisateur, un identifiant inconnu ou une valeur invalide sont ignorés.
-  await engine.dismiss(['s1/agent-a', 's1/agent-c', 's2/agent-w', 's1/nope', 42]);
+  // Une instance active ou qui attend l'utilisateur, un identifiant inconnu ou une valeur invalide sont ignorés.
+  await engine.dismiss(['s1/agent-a', 's1/agent-b', 's1/agent-c', 's2/agent-w', 's1/nope', 42]);
   assert.equal(lead()?.state, 'inactive');
-  assert.deepEqual(last?.snapshot.helpers.map((h) => h.id).sort(), ['s1/agent-b', 's2/agent-w']);
+  assert.deepEqual(last?.snapshot.helpers.map((h) => h.id).sort(), ['s1/agent-c', 's2/agent-w']);
 
   // L'instance retirée se termine puis redémarre sous le même nom : elle n'est plus masquée.
   run('agent-a', 'tech-lead', 30 * 60_000, true);

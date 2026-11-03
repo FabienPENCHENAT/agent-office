@@ -2247,9 +2247,9 @@
   cardWaiting.textContent = 'Waiting for your answer in Claude Code.';
   card.append(cardName, cardWaiting, cardOpen, cardHint, cardDismiss, cardDismissHint);
 
-  /** Instances que l'on peut retirer du bureau : le mini-bot lui-même, ou celles d'un agent ; jamais en attente de réponse. */
+  /** Instances grises que l'on peut retirer du bureau : le mini-bot lui-même, ou celles d'un agent. */
   const dismissableOf = (/** @type {any} */ p) =>
-    p.state === 'waiting' || p.leaving || p.packing ? [] : p.bot ? [p.id] : p.dismissableRuns || [];
+    p.leaving || p.packing ? [] : p.bot ? (p.state === 'unknown' ? [p.id] : []) : p.dismissableRuns || [];
   scene.appendChild(card);
 
   // ======================================================================
@@ -2461,7 +2461,7 @@
       const runs = dismissableOf(p);
       cardDismiss.hidden = !runs.length;
       cardDismissHint.hidden = !runs.length;
-      cardDismiss.textContent = p.bot ? 'Dismiss from office' : runs.length > 1 ? `Dismiss ${runs.length} subagent runs` : 'Dismiss subagent run';
+      cardDismiss.textContent = p.bot ? 'Dismiss from office' : runs.length > 1 ? `Dismiss ${runs.length} stuck runs` : 'Dismiss stuck run';
       card.hidden = false;
       placeCard();
     }

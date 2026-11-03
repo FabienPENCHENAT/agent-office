@@ -91,7 +91,7 @@ export interface AgentStatus {
   model?: string;
   /** Personnage « Claude » intégré, sans fichier de définition. */
   builtin?: boolean;
-  /** Instances de sous-agents de cet agent que l'utilisateur peut retirer du bureau (jamais quand il attend une réponse). */
+  /** Agent gris à cause de sous-agents silencieux : leurs instances, que l'utilisateur peut retirer du bureau. */
   dismissableRuns?: string[];
 }
 

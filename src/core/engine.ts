@@ -41,7 +41,7 @@ export class OfficeEngine {
   private adapterKey = '';
   /** Instances de sous-agents retirées du bureau par l'utilisateur, tant qu'elles restent dans le relevé. */
   private dismissed = new Set<string>();
-  /** Instances du dernier relevé qui n'attendent pas l'utilisateur : seules celles-ci peuvent être retirées. */
+  /** Instances grises du dernier relevé (silencieuses, sans attendre l'utilisateur) : seules celles-ci peuvent être retirées. */
   private dismissable = new Set<string>();
 
   constructor(private readonly host: EngineHost) {
@@ -68,9 +68,9 @@ export class OfficeEngine {
   }
 
   /**
-   * Retire du bureau des instances de sous-agents, quand l'utilisateur le décide. La vue ne donne que des
-   * identifiants : seule une instance du dernier relevé qui n'attend pas l'utilisateur est acceptée. Claude Code
-   * n'est pas touché.
+   * Retire du bureau des instances de sous-agents grises. La vue ne donne que des identifiants : seule une instance
+   * en état inconnu au dernier relevé est acceptée (jamais une instance active ou qui attend l'utilisateur).
+   * Claude Code n'est pas touché.
    */
   dismiss(ids: unknown): Promise<void> {
     const accepted = Array.isArray(ids) ? ids.filter((id): id is string => typeof id === 'string' && this.dismissable.has(id)) : [];
@@ -125,7 +125,7 @@ export class OfficeEngine {
       const runs = claude.subagents ?? [];
       const live = new Set(runs.map((r) => r.id));
       this.dismissed = new Set([...this.dismissed].filter((id) => live.has(id)));
-      this.dismissable = new Set(runs.filter((r) => r.state !== 'waiting').map((r) => r.id));
+      this.dismissable = new Set(runs.filter((r) => r.state === 'unknown').map((r) => r.id));
       claude = withoutDismissed(claude, this.dismissed);
       const notices = discovery.errors.map((e) => `Unreadable agents folder: ${e.dir} (${e.message})`);
       const definitions = c.showClaude ? withDefaultAgent(discovery.definitions) : discovery.definitions;
