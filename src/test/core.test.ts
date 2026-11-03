@@ -509,7 +509,7 @@ test('retirer du bureau : dès qu\'un agent est gris à cause de sous-agents, ja
   assert.equal(withoutDismissed(report, new Set()), report);
 });
 
-test('retirer du bureau : le moteur n\'accepte que des instances grises et oublie celles qui finissent', async () => {
+test('retirer du bureau : le moteur n\'accepte que des instances grises et oublie celles qui finissent ou reprennent', async () => {
   const { dir, proj, session } = claudeFixture();
   const now = Date.now();
   session(process.pid, 's1', 'idle');
@@ -546,6 +546,11 @@ test('retirer du bureau : le moteur n\'accepte que des instances grises et oubli
   await engine.dismiss(['s1/agent-a', 's1/agent-b', 's1/agent-c', 's2/agent-w', 's1/nope', 42]);
   assert.equal(lead()?.state, 'inactive');
   assert.deepEqual(last?.snapshot.helpers.map((h) => h.id).sort(), ['s1/agent-c', 's2/agent-w']);
+
+  // L'instance retirée se remet à écrire : elle n'était pas perdue, elle revient au bureau.
+  run('agent-b', 'Explore', 1_000);
+  await engine.tick();
+  assert.deepEqual(last?.snapshot.helpers.map((h) => h.id).sort(), ['s1/agent-b', 's1/agent-c', 's2/agent-w']);
 
   // L'instance retirée se termine puis redémarre sous le même nom : elle n'est plus masquée.
   run('agent-a', 'tech-lead', 30 * 60_000, true);

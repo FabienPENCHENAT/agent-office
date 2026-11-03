@@ -39,7 +39,7 @@ export class OfficeEngine {
   private again = false;
   private adapter: ClaudeCodeAdapter;
   private adapterKey = '';
-  /** Instances de sous-agents retirées du bureau par l'utilisateur, tant qu'elles restent dans le relevé. */
+  /** Instances de sous-agents retirées du bureau par l'utilisateur, tant qu'elles restent grises. */
   private dismissed = new Set<string>();
   /** Instances grises du dernier relevé (silencieuses, sans attendre l'utilisateur) : seules celles-ci peuvent être retirées. */
   private dismissable = new Set<string>();
@@ -121,11 +121,10 @@ export class OfficeEngine {
       } catch (err) {
         claude = { health: { runtime: 'claude-code', status: 'unavailable', message: String(err) }, signals: [] };
       }
-      // Une instance retirée qui n'est plus dans le relevé (terminée ou expirée) est oubliée.
-      const runs = claude.subagents ?? [];
-      const live = new Set(runs.map((r) => r.id));
-      this.dismissed = new Set([...this.dismissed].filter((id) => live.has(id)));
-      this.dismissable = new Set(runs.filter((r) => r.state === 'unknown').map((r) => r.id));
+      this.dismissable = new Set((claude.subagents ?? []).filter((r) => r.state === 'unknown').map((r) => r.id));
+      // Une instance retirée qui n'est plus grise est oubliée : terminée, expirée, ou de nouveau active ou en attente
+      // de l'utilisateur (elle n'était pas perdue, elle revient au bureau).
+      this.dismissed = new Set([...this.dismissed].filter((id) => this.dismissable.has(id)));
       claude = withoutDismissed(claude, this.dismissed);
       const notices = discovery.errors.map((e) => `Unreadable agents folder: ${e.dir} (${e.message})`);
       const definitions = c.showClaude ? withDefaultAgent(discovery.definitions) : discovery.definitions;

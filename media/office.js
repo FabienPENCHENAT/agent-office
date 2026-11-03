@@ -311,8 +311,14 @@
   const bots = new Map();
   /** Sous-agents en cours au-delà des mini-bots représentés (ils attendent derrière la porte). */
   let botOverflow = 0;
-  /** Instances retirées du bureau : leur mini-bot ne revient pas, même si un relevé en retard les liste encore. */
-  const dismissedRuns = new Set();
+  /**
+   * Instances retirées du bureau → moment du clic. Leur mini-bot ne revient pas si un relevé en retard les liste encore ;
+   * un relevé plus récent qui les liste toujours l'emporte (le moteur a refusé, ou l'instance s'est remise au travail).
+   * @type {Map<string, number>}
+   */
+  const dismissedRuns = new Map();
+  /** Marge pour un relevé déjà en cours au moment du clic. */
+  const DISMISS_GRACE_MS = 3000;
   /** @type {{x:number,y:number,a:number,t0:number}[]} poussière soulevée par un carton qui apparaît */
   let puffs = [];
   /** @type {Map<string, string>} lieu de détente → agent qui l'occupe */
@@ -632,8 +638,12 @@
     const seen = new Set();
     for (const h of snapshot.helpers || []) {
       seen.add(h.id);
-      if (dismissedRuns.has(h.id)) {
-        continue;
+      const dismissedAt = dismissedRuns.get(h.id);
+      if (dismissedAt !== undefined) {
+        if (now < dismissedAt + DISMISS_GRACE_MS) {
+          continue;
+        }
+        dismissedRuns.delete(h.id);
       }
       let b = bots.get(h.id);
       if (!b) {
@@ -657,13 +667,18 @@
         }
       }
       if (b.leaving) {
-        // Revenu dans la liste (un autre sous-agent a fini avant lui) : il fait demi-tour.
-        Object.assign(b, { leaving: false, spot: claimSpot(b), tasks: [], cur: null, path: [] });
+        // Revenu dans la liste (un autre sous-agent a fini avant lui, ou son retrait n'a pas tenu) : il fait demi-tour.
+        Object.assign(b, { leaving: false, spot: claimSpot(b), tasks: [], cur: null, path: [], packing: false, carton: 0, hurry: false });
       }
       b.state = h.state;
       // L'agent attitré du bureau se remet au travail : le mini-bot lui laisse la place.
       if (b.spot.desk && deskBusy(b.spot.key)) {
         b.spot = claimSpot(b);
+      }
+    }
+    for (const id of dismissedRuns.keys()) {
+      if (!seen.has(id)) {
+        dismissedRuns.delete(id);
       }
     }
     for (const b of bots.values()) {
@@ -2479,7 +2494,7 @@
     if (!p || !ids.length) {
       return;
     }
-    ids.forEach((id) => dismissedRuns.add(id));
+    ids.forEach((id) => dismissedRuns.set(id, Date.now()));
     vscode.postMessage({ type: 'dismiss', ids });
     packUp(p);
   });

@@ -310,7 +310,7 @@ First check that it isn't waiting for you: an agent that needs your answer (a pe
 
 A “?” that lasts is usually a ghost: the subagent was interrupted (`Esc`, an error, a session that moved on) and Claude Code never marked it as finished, so the office keeps showing it for up to 6 hours. Click it, then **Dismiss from office** (for a mini-bot) or **Dismiss stuck run** (for an agent's character). The mini-bot leaves for good; the agent packs up, walks out, then comes back empty-handed to its idle routine.
 
-The button is there as soon as a subagent is grey (silent for `agentOffice.subagentSilenceMinutes`, 20 by default; lower it to see the “?” sooner) and isn't waiting for your answer. A subagent that is working or waiting for you never offers it. It only hides the instance in the office: nothing is stopped in Claude Code. To actually stop a running subagent, press `Esc` in its Claude Code session. A dismissal lasts until you restart VS Code or the desktop app: an instance that is still stuck then shows up again.
+The button is there as soon as a subagent is grey (silent for `agentOffice.subagentSilenceMinutes`, 20 by default; lower it to see the “?” sooner) and isn't waiting for your answer. A subagent that is working or waiting for you never offers it. It only hides the instance in the office: nothing is stopped in Claude Code. To actually stop a running subagent, press `Esc` in its Claude Code session. If a dismissed subagent turns out to be alive (it starts working again, or asks you something), it comes back to the office. Otherwise the dismissal lasts until you restart VS Code or the desktop app: an instance that is still stuck then shows up again.
 </details>
 
 <details>
