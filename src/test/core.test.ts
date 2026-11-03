@@ -5,7 +5,7 @@ import * as path from 'path';
 import { test } from 'node:test';
 import { DEFAULT_AGENT, definitionSources, discoverDefinitions, parseFrontmatter, withDefaultAgent } from '../discovery/agentDefinitions';
 import { panelSetting, resolveSettings } from '../core/settings';
-import { addProjectFolder, dropRecent, MAX_RECENTS, projectFolders, pushRecent, readSettingsFile, readState, writeSetting, writeState } from '../standalone/store';
+import { dropRecent, MAX_RECENTS, projectFolders, pushRecent, readSettingsFile, readState, writeSetting, writeState } from '../standalone/store';
 import { ClaudeCodeAdapter, cwdMatcher, modelLabel, projectDirName } from '../runtime/claudeCode';
 import { readCopilot } from '../runtime/copilot';
 import { normalize } from '../state/normalize';
@@ -424,14 +424,13 @@ test('portée : dossier du projet et sous-dossiers, pas les dossiers voisins', (
   assert.equal(cwdMatcher(['/work/app'], 'linux')('/WORK/app'), false);
 });
 
-test('standalone settings file: missing, invalid, and adding a project folder', () => {
+test('standalone settings file: missing, invalid, and project folders', () => {
   const dir = tmp();
-  const file = path.join(dir, 'sub', 'settings.json');
+  const file = path.join(dir, 'settings.json');
   assert.deepEqual(readSettingsFile(file), {});
-  addProjectFolder(file, '/work/a');
-  addProjectFolder(file, '/work/a');
-  addProjectFolder(file, '/work/b');
+  fs.writeFileSync(file, JSON.stringify({ projectFolders: ['/work/a', '', 3, '/work/b'] }));
   assert.deepEqual(projectFolders(readSettingsFile(file)), ['/work/a', '/work/b']);
+  assert.deepEqual(projectFolders({ projectFolders: 'nope' }), []);
   // Un réglage de la roue crantée garde les autres clés ; l'ancien décor coupé devient `seasonalDecor: false`.
   fs.writeFileSync(file, JSON.stringify({ projectFolders: ['/work/a'], christmasDecor: 'off', pinnedAgents: ['pm'] }));
   writeSetting(file, 'sessionScope', 'all');

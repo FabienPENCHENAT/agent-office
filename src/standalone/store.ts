@@ -54,17 +54,6 @@ function merged(settings: StandaloneFile, changes: Partial<StandaloneFile>): str
   return `${JSON.stringify({ ...SETTINGS_TEMPLATE, ...rest, ...legacy, ...changes }, null, 2)}\n`;
 }
 
-/** Ajoute un dossier de projet sans toucher aux autres clés du fichier. */
-export function addProjectFolder(file: string, dir: string): void {
-  const settings = readSettingsFile(file);
-  const folders = projectFolders(settings);
-  if (!folders.includes(dir)) {
-    folders.push(dir);
-  }
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, merged(settings, { projectFolders: folders }));
-}
-
 /** Enregistre un réglage changé dans la roue crantée, sans toucher aux autres clés du fichier. */
 export function writeSetting<K extends keyof PanelSettings>(file: string, key: K, value: PanelSettings[K]): void {
   const settings = readSettingsFile(file);
