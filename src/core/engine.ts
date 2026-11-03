@@ -3,6 +3,7 @@ import { DEFAULT_AGENT, definitionSources, discoverDefinitions, withDefaultAgent
 import { ClaudeCodeAdapter } from '../runtime/claudeCode';
 import { readCopilot } from '../runtime/copilot';
 import { winterDecor } from '../state/season';
+import { withoutDismissed } from '../state/dismiss';
 import { buildSnapshot } from '../state/snapshot';
 import { summarize } from '../state/summary';
 import { OfficeSnapshot, RuntimeReport } from '../types';
@@ -38,6 +39,10 @@ export class OfficeEngine {
   private again = false;
   private adapter: ClaudeCodeAdapter;
   private adapterKey = '';
+  /** Instances de sous-agents retirées du bureau par l'utilisateur, tant qu'elles restent dans le relevé. */
+  private dismissed = new Set<string>();
+  /** Instances silencieuses du dernier relevé : seules celles-ci peuvent être retirées. */
+  private stuck = new Set<string>();
 
   constructor(private readonly host: EngineHost) {
     this.adapter = this.makeAdapter();
@@ -60,6 +65,19 @@ export class OfficeEngine {
   /** Fichier de définition d'un agent découvert ; seul un fichier découvert peut être ouvert. */
   fileOf(id: unknown): string | undefined {
     return typeof id === 'string' ? this.files.get(id) : undefined;
+  }
+
+  /**
+   * Retire du bureau des instances de sous-agents silencieuses. La vue ne donne que des identifiants : seule une
+   * instance en état inconnu au dernier relevé est acceptée. Claude Code n'est pas touché.
+   */
+  dismiss(ids: unknown): Promise<void> {
+    const accepted = Array.isArray(ids) ? ids.filter((id): id is string => typeof id === 'string' && this.stuck.has(id)) : [];
+    if (!accepted.length) {
+      return Promise.resolve();
+    }
+    accepted.forEach((id) => this.dismissed.add(id));
+    return this.tick();
   }
 
   start(): void {
@@ -102,6 +120,12 @@ export class OfficeEngine {
       } catch (err) {
         claude = { health: { runtime: 'claude-code', status: 'unavailable', message: String(err) }, signals: [] };
       }
+      // Une instance retirée qui n'est plus dans le relevé (terminée ou expirée) est oubliée.
+      const runs = claude.subagents ?? [];
+      const live = new Set(runs.map((r) => r.id));
+      this.dismissed = new Set([...this.dismissed].filter((id) => live.has(id)));
+      this.stuck = new Set(runs.filter((r) => r.state === 'unknown').map((r) => r.id));
+      claude = withoutDismissed(claude, this.dismissed);
       const notices = discovery.errors.map((e) => `Unreadable agents folder: ${e.dir} (${e.message})`);
       const definitions = c.showClaude ? withDefaultAgent(discovery.definitions) : discovery.definitions;
       const snapshot = buildSnapshot(definitions, [claude, readCopilot()], Date.now(), {

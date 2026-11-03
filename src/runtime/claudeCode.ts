@@ -302,10 +302,11 @@ export class ClaudeCodeAdapter {
     if (sessionDir) {
       const dir = path.join(sessionDir, session.sessionId, 'subagents');
       for (const sub of await this.subagents(dir)) {
+        const runId = `${session.sessionId}/${sub.id}`;
         if (sub.signal) {
-          signals.push(sub.signal);
+          signals.push({ ...sub.signal, runId });
           subagents.push({
-            id: `${session.sessionId}/${sub.id}`,
+            id: runId,
             agentType: sub.agentType,
             state: sub.signal.state === 'unknown' ? 'unknown' : 'active',
             startedAt: sub.startedAt,
@@ -313,7 +314,7 @@ export class ClaudeCodeAdapter {
         }
         if (mainAgent && sub.depth === 1) {
           delegations.push({
-            id: `${session.sessionId}/${sub.id}`,
+            id: runId,
             from: mainAgent,
             to: sub.agentType,
             runtime: 'claude-code',

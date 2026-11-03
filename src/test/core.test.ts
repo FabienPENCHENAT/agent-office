@@ -4,10 +4,12 @@ import * as os from 'os';
 import * as path from 'path';
 import { test } from 'node:test';
 import { DEFAULT_AGENT, definitionSources, discoverDefinitions, parseFrontmatter, withDefaultAgent } from '../discovery/agentDefinitions';
+import { OfficeEngine, OfficeUpdate } from '../core/engine';
 import { panelSetting, resolveSettings } from '../core/settings';
 import { dropRecent, MAX_RECENTS, projectFolders, pushRecent, readSettingsFile, readState, writeSetting, writeState } from '../standalone/store';
 import { ClaudeCodeAdapter, cwdMatcher, modelLabel, projectDirName } from '../runtime/claudeCode';
 import { readCopilot } from '../runtime/copilot';
+import { withoutDismissed } from '../state/dismiss';
 import { normalize } from '../state/normalize';
 import { winterDecor } from '../state/season';
 import { roleOf } from '../state/placement';
@@ -464,4 +466,81 @@ test('standalone recents: most recent first, no duplicates, bounded, removable, 
   assert.deepEqual(readState(file), state);
   fs.writeFileSync(file, '{ nope');
   assert.deepEqual(readState(file), { recents: [] });
+});
+
+test('instances bloquées : seules les instances silencieuses d\'un agent inconnu peuvent être retirées', () => {
+  const sig = (agentName: string, state: 'active' | 'idle' | 'unknown', runId?: string) => ({
+    runtime: 'claude-code' as const,
+    agentName,
+    state,
+    observedAt: NOW,
+    ...(runId ? { runId } : {}),
+  });
+  const [stuck, mixed, busy] = normalize(
+    [def('tech-lead'), def('pm'), def('qa')],
+    [
+      okClaude([
+        sig('tech-lead', 'unknown', 's/a'),
+        sig('tech-lead', 'unknown', 's/b'),
+        sig('pm', 'unknown', 's/c'),
+        sig('pm', 'unknown'), // session principale non concluante : rien à retirer
+        sig('qa', 'unknown', 's/d'),
+        sig('qa', 'active', 's/e'),
+      ]),
+    ],
+  );
+  assert.deepEqual(stuck.stuckRuns, ['s/a', 's/b']);
+  assert.equal(mixed.stuckRuns, undefined);
+  assert.equal(busy.stuckRuns, undefined);
+
+  const report: RuntimeReport = {
+    ...okClaude([sig('tech-lead', 'unknown', 's/a'), sig('tech-lead', 'idle')]),
+    subagents: [{ id: 's/a', agentType: 'tech-lead', state: 'unknown', startedAt: NOW }],
+  };
+  const kept = withoutDismissed(report, new Set(['s/a']));
+  assert.deepEqual(kept.signals.map((s) => s.state), ['idle']);
+  assert.deepEqual(kept.subagents, []);
+  assert.equal(withoutDismissed(report, new Set()), report);
+});
+
+test('retirer du bureau : le moteur n\'accepte que des instances silencieuses et les oublie une fois finies', async () => {
+  const { dir, proj, session } = claudeFixture();
+  const now = Date.now();
+  session(process.pid, 's1', 'idle');
+  write(path.join(proj, 's1.jsonl'), '{"type":"agent-setting","agentSetting":"pm"}\n');
+  write(path.join(dir, 'agents', 'pm.md'), '---\nname: pm\n---\n');
+  write(path.join(dir, 'agents', 'tech-lead.md'), '---\nname: tech-lead\n---\n');
+  const sub = path.join(proj, 's1', 'subagents');
+  const run = (id: string, agentType: string, age: number, finished = false) => {
+    write(path.join(sub, `${id}.meta.json`), JSON.stringify({ agentType, ...(finished ? { finished } : {}) }), now - age);
+    write(path.join(sub, `${id}.jsonl`), '{}', now - age);
+  };
+  run('agent-a', 'tech-lead', 30 * 60_000);
+  run('agent-b', 'Explore', 30 * 60_000);
+  run('agent-c', 'Explore', 1_000);
+  let last: OfficeUpdate | undefined;
+  const engine = new OfficeEngine({
+    settings: () => resolveSettings({ claudeConfigDir: dir, showDefaultClaude: false }),
+    projectDirs: () => [],
+    onUpdate: (u) => {
+      last = u;
+    },
+  });
+  await engine.tick();
+  const lead = () => last?.snapshot.slots.find((s) => s.agent?.name === 'tech-lead')?.agent;
+  assert.equal(lead()?.state, 'unknown');
+  assert.deepEqual(lead()?.stuckRuns, ['s1/agent-a']);
+  assert.deepEqual(last?.snapshot.helpers.map((h) => h.id).sort(), ['s1/agent-b', 's1/agent-c']);
+
+  // Une instance active, un identifiant inconnu ou une valeur invalide sont ignorés.
+  await engine.dismiss(['s1/agent-a', 's1/agent-b', 's1/agent-c', 's1/nope', 42]);
+  assert.equal(lead()?.state, 'inactive');
+  assert.deepEqual(last?.snapshot.helpers.map((h) => h.id), ['s1/agent-c']);
+
+  // L'instance retirée se termine puis redémarre sous le même nom : elle n'est plus masquée.
+  run('agent-a', 'tech-lead', 30 * 60_000, true);
+  await engine.tick();
+  run('agent-a', 'tech-lead', 25 * 60_000);
+  await engine.tick();
+  assert.equal(lead()?.state, 'unknown');
 });

@@ -22,6 +22,12 @@ export function normalize(definitions: AgentDefinition[], reports: RuntimeReport
     const relevant = signals.filter((s) => (state === 'active' ? s.state === 'active' : true));
     const recent = [...relevant].sort((a, b) => b.observedAt - a.observedAt);
     const model = recent.find((s) => s.model)?.model;
+    // Inconnu seulement à cause de sous-agents silencieux : ces instances peuvent être retirées du bureau.
+    const unknown = signals.filter((s) => s.state === 'unknown');
+    const stuckRuns =
+      state === 'unknown' && report?.health.status === 'ok' && unknown.every((s) => s.runId)
+        ? unknown.map((s) => s.runId as string)
+        : [];
     return {
       id: def.id,
       name: def.name,
@@ -31,6 +37,7 @@ export function normalize(definitions: AgentDefinition[], reports: RuntimeReport
       updatedAt: recent[0]?.observedAt,
       ...(model ? { model } : {}),
       ...(def.builtin ? { builtin: true } : {}),
+      ...(stuckRuns.length ? { stuckRuns } : {}),
     };
   });
 }

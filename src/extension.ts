@@ -131,6 +131,8 @@ class OfficeController implements vscode.WebviewViewProvider, vscode.Disposable 
         void this.openAgent(msg.id);
       } else if (msg?.type === 'setSetting') {
         void this.setSetting(msg.key, msg.value);
+      } else if (msg?.type === 'dismiss') {
+        void this.engine.dismiss(msg.ids);
       }
     });
     view.onDidDispose(() => {

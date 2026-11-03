@@ -30,6 +30,7 @@ A tiny pixel-art office that lives in a VS Code panel, or in its own desktop win
 - **Claude itself has a desk**: when you talk to Claude Code without a custom agent, a **Claude** character works, delegates to your agents, and shows the model it's using (e.g. Opus 5.5). No custom agent needed to see the office come alive.
 - **Mini-bots for the other subagents**: built-in subagents (Explore, Plan, general-purpose…) and extra copies of an agent already at work roll in as small tracked robots and take a free desk.
 - **Edit an agent in one click**: click a character, it turns to face you, and **Edit agent file** opens its `.md` in the editor. Restart Claude Code to apply your changes.
+- **Dismiss a stuck subagent**: a subagent left grey with a “?” (interrupted, never marked as finished) can be sent home from its card. It packs its plant and mug in a cardboard box and hurries out the door. Claude Code itself is not touched.
 - **Private by design**: 100% local and read-only. No code, prompt or conversation is ever displayed.
 
 ## Getting started
@@ -252,7 +253,7 @@ For the other settings, open Settings in VS Code and search for **Agent Office**
 ## Privacy
 
 - **100% local**: the extension makes no network request.
-- **Read-only**: it never changes a Claude Code or agent file and never starts or controls an agent. The only thing it writes is its own settings, when you use the ⚙ panel.
+- **Read-only**: it never changes a Claude Code or agent file and never starts, stops or controls an agent. The only thing it writes is its own settings, when you use the ⚙ panel. Dismissing a stuck subagent only hides it in the office.
 - **Nothing of your work is shown**: only agent names, statuses, the Claude model name and timestamps reach the office view.
 
 ## Known limitations
@@ -299,6 +300,14 @@ Your agents keep their names, so nothing changes in how you call them.
 <summary><b>My agent is working but its desk stays empty</b></summary>
 
 Check that Claude Code was started with that agent (`claude --agent <name>`), or that the agent was launched as a subagent. Also check that its `.md` file is in `~/.claude/agents/` or in the `.claude/agents/` folder of the project open in VS Code.
+</details>
+
+<details>
+<summary><b>A subagent has been grey with a “?” for ages. How do I get rid of it?</b></summary>
+
+This is usually a ghost: the subagent was interrupted (`Esc`, an error, a session that moved on) and Claude Code never marked it as finished, so the office keeps showing it for up to 6 hours. Click it, then **Dismiss from office** (for a mini-bot) or **Dismiss stuck run** (for an agent's character). The mini-bot leaves for good; the agent packs up, walks out, then comes back empty-handed to its idle routine.
+
+The button only appears on an instance in the unknown state (silent for `agentOffice.subagentSilenceMinutes`, 20 by default), so you can't send home a subagent that is really working. It only hides the instance in the office: nothing is stopped in Claude Code. To actually stop a running subagent, press `Esc` in its Claude Code session. A dismissal lasts until you restart VS Code or the desktop app: an instance that is still stuck then shows up again.
 </details>
 
 <details>

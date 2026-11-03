@@ -31,6 +31,7 @@ The visual idea is inspired by [Pixel Agents](https://github.com/pixel-agents-hq
 | A subagent has **no character of its own** | **Real**: running subagent of a built-in type (Explore, general-purpose, Plan…, forks, workflow agents) or a second instance of an agent already at work | A **mini-bot** (a small tracked robot with a screen head on a neck and a box body in a color per subagent type, with the “work” bubble while it runs) rolls in from the **doormat** at the right-hand end of the corridor. It takes a free open-space desk, first one with no assigned agent, then one whose agent is idle, and its screen lights up. If that agent gets back to work, the mini-bot gives up the desk. With no free desk, it sits on the floor in the corridor, back to the wall, the light on its body blinking. When the subagent finishes, it leaves the same way. Up to **8** mini-bots; beyond that, a “+N” sign above the doormat counts the ones waiting outside. |
 | An agent is idle | **Real** for the status; **decorative** for the activity | Free routine: hammock, bench by the pond, pond side, chat for two, stroll. |
 | The status is unknown | Inconclusive signal or unavailable source | The character stops and turns grey, with a “?” bubble. |
+| A stuck subagent is **dismissed** | **User action** on an instance in the unknown state | A “!” bubble, then it stands up, turns to face you, and a cardboard box pops up in its hands in a puff of dust, with a plant and a red mug sticking out. With a sweat drop, it hurries (and hops) to the doormat and out the door. A mini-bot is gone for good. An agent's character stays grey until it's outside, then walks back in empty-handed, in color, has a coffee and resumes its idle routine. |
 
 Bubbles are always drawn on top of everything else. A character sitting on the side of a meeting table is drawn in front of the table.
 
@@ -52,6 +53,15 @@ The presents and the snowman always occupy their tiles, decorated or not, so pat
 Click a character: it stops and turns to face you, and a card shows its name with an **Edit agent file** link. The link opens the agent's definition (`.md`) in the editor; Claude Code only picks up the change in a new session. Clicking elsewhere or pressing `Escape` closes the card, and the character resumes what it was doing. Names in the list below the office open the file too (keyboard access). The **Claude** character has no file: its card only shows its name and model.
 
 The file path stays in the extension: the view only sends back the agent's identifier, and only a file found during discovery can be opened.
+
+## Dismissing a stuck subagent
+
+A subagent that is interrupted (`Esc`, an error, a session that moves on) may never be marked `finished`. It then stays “working”, then “unknown” after `subagentSilenceMinutes` of silence, until it expires after 6 hours of silence. Subagents run inside their session's Claude Code process, so there is nothing to stop on their own: the office only offers to **hide** them.
+
+- **When**: the card shows **Dismiss from office** on a mini-bot in the unknown state, and **Dismiss stuck run** (or *Dismiss N stuck runs*) on a character whose unknown state comes only from silent subagent instances (`AgentStatus.stuckRuns`). An unknown main session, an unavailable source or an active instance never offer it.
+- **How**: the view sends `{ type: 'dismiss', ids }` with the instance identifiers (`<sessionId>/<subagent file>`, also carried by each subagent signal as `runId`). `OfficeEngine.dismiss` only accepts identifiers that were in the unknown state at the last refresh, then refreshes at once. `state/dismiss.ts` removes those instances' signals and mini-bots from every following report, so the status bar, the legend and the office agree.
+- **How long**: in memory, per engine (VS Code window or desktop window). An instance is forgotten once it leaves the report (finished or expired), and a dismissed instance reappears after a restart if it is still in the report.
+- Claude Code is never touched: no file is written, no process is signalled.
 
 ## Supported runtimes
 
@@ -138,7 +148,7 @@ Example setting:
 - `workbench.reduceMotion` is respected: `on`, `off`, or `auto` (which follows `prefers-reduced-motion`).
 - In reduced mode, the scene becomes **static**:
   - working agents are at their desk, the others at a fixed spot in the lounge;
-  - there's no walking, no idle routine and no delegation scene;
+  - there's no walking, no idle routine and no delegation scene; a dismissed instance simply disappears;
   - the scene is redrawn once per second.
 - A text list of the ten desks and a `role="status"` / `aria-live` banner carry the information for screen readers. The canvas is decorative (`aria-hidden`).
 - The legend pairs each name with the color of its character and desk item.
@@ -148,7 +158,7 @@ Example setting:
 - Data stays **100% local**: no network request, neither in the extension nor in the Webview.
 - The Webview uses a strict CSP: `default-src 'none'`, a single local script with a nonce, local styles and images only.
 - The Webview only receives names, statuses, desks, colors and timestamps.
-- The extension never writes to any Claude Code configuration, session or agent file (it can open an agent's file in the editor; you make the edits). It only writes its own settings (`agentOffice.*`, or the desktop app's `settings.json`) when you change them in the ⚙ panel, and only the four keys and values the panel offers. It doesn't start or control any agent, and can't create one.
+- The extension never writes to any Claude Code configuration, session or agent file (it can open an agent's file in the editor; you make the edits). It only writes its own settings (`agentOffice.*`, or the desktop app's `settings.json`) when you change them in the ⚙ panel, and only the four keys and values the panel offers. It doesn't start, stop or control any agent, and can't create one. Dismissing a stuck subagent only filters it out of the office's own display.
 
 ## Limits
 
@@ -202,7 +212,8 @@ src/
   discovery/agentDefinitions.ts  read-only agent definitions (name, color, description)
   runtime/claudeCode.ts          Claude Code adapter → status signals + delegations
   runtime/copilot.ts             Copilot adapter: “not supported”
-  state/normalize.ts             definitions + signals → working / idle / unknown
+  state/normalize.ts             definitions + signals → working / idle / unknown (+ stuck instances)
+  state/dismiss.ts               hides the subagent instances dismissed from the office
   state/slots.ts                 stable rule for the ten desks
   state/placement.ts             role (setting, name, description) → room and desk
   state/summary.ts               answer to “which agent is working?”
@@ -216,6 +227,6 @@ src/
   standalone/main.ts             Electron main process: window, menu, protocol, settings watch
   standalone/preload.ts          contextBridge between the page and the main process
   standalone/store.ts            settings.json and recent folders (state.json) of the desktop app
-media/office.js                  office layout, pathfinding, idle routine, delegation scenes, colors, rendering
+media/office.js                  office layout, pathfinding, idle routine, delegation and dismissal scenes, colors, rendering
 media/office.css                 banner, accessible legend
 ```

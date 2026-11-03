@@ -7,6 +7,8 @@
 //    à un bureau libre de l'open space (sinon par terre dans le couloir, dos au mur) et repart par le même chemin.
 //  - Une délégation qui démarre se traduit par une visite (un seul agent) ou une réunion (plusieurs).
 //  - Une délégation terminée se traduit par une remise de copie au délégant.
+//  - Une instance bloquée retirée du bureau fait ses cartons et sort par la porte du couloir (un agent attitré revient
+//    ensuite, les mains vides).
 // Ce qui est décoratif : le cycle de vie des agents inactifs (hamac, banc et bord du lac, discussions, promenades).
 (function () {
   'use strict';
@@ -308,6 +310,10 @@
   const bots = new Map();
   /** Sous-agents en cours au-delà des mini-bots représentés (ils attendent derrière la porte). */
   let botOverflow = 0;
+  /** Instances retirées du bureau : leur mini-bot ne revient pas, même si un relevé en retard les liste encore. */
+  const dismissedRuns = new Set();
+  /** @type {{x:number,y:number,a:number,t0:number}[]} poussière soulevée par un carton qui apparaît */
+  let puffs = [];
   /** @type {Map<string, string>} lieu de détente → agent qui l'occupe */
   const spotTaken = new Map();
   const seenStart = new Set();
@@ -455,7 +461,7 @@
     const dx = target.x - p.x;
     const dy = target.y - p.y;
     const dist = Math.hypot(dx, dy);
-    const move = 72 * dt;
+    const move = (p.hurry ? 90 : 72) * dt;
     p.pose = 'walk';
     if (Math.abs(dx) > Math.abs(dy)) {
       p.dir = dx < 0 ? 'left' : 'right';
@@ -612,6 +618,9 @@
     const seen = new Set();
     for (const h of snapshot.helpers || []) {
       seen.add(h.id);
+      if (dismissedRuns.has(h.id)) {
+        continue;
+      }
       let b = bots.get(h.id);
       if (!b) {
         const seed = hash(h.id);
@@ -756,6 +765,58 @@
     );
   }
 
+  /**
+   * Instance bloquée retirée du bureau : surprise, elle se lève, fait ses cartons et file par la porte du couloir.
+   * Un mini-bot ne revient pas ; un agent attitré revient les mains vides, en couleur, puis reprend sa routine.
+   */
+  function packUp(/** @type {any} */ p) {
+    if (p.bot) {
+      p.leaving = true;
+      p.spot = null;
+      if (reduced()) {
+        bots.delete(p.id);
+        return;
+      }
+    } else if (reduced()) {
+      return;
+    }
+    clearLife(p);
+    Object.assign(p, { tasks: [], cur: null, path: [], activity: null, packing: true });
+    const tasks = [
+      wait(0.6, 'alert'),
+      call(() => {
+        p.pose = 'stand';
+        p.dir = 'down';
+      }),
+      wait(0.45, null),
+      call(() => {
+        p.carton = clock;
+        for (let i = 0; i < 10; i++) {
+          puffs.push({ x: p.x, y: p.y - 8, a: (i / 10) * Math.PI * 2, t0: clock });
+        }
+      }),
+      wait(0.8, null),
+      call(() => {
+        p.hurry = true;
+      }),
+      go(SIDE_DOOR, 'stand'),
+      { k: 'exit' },
+    ];
+    if (!p.bot) {
+      const back = pick(WANDER.filter((t) => t.y <= CORRIDOR.y1 && t.x >= COLS - 12)) || SIDE_DOOR;
+      tasks.push(
+        call(() => Object.assign(p, { gone: false, carton: 0, hurry: false })),
+        wait(1.4, null),
+        call(() => {
+          p.packing = false;
+        }),
+        go(back, 'stand', 'down'),
+        wait(3, 'coffee'),
+      );
+    }
+    p.tasks = scripted(tasks);
+  }
+
   /** Détecte les délégations nouvelles (lancement) et terminées (remise de copie). */
   function handleInteractions() {
     const now = snapshot.generatedAt;
@@ -810,6 +871,7 @@
       p.color = colors.get(a.id);
       p.builtin = !!a.builtin;
       p.model = a.model || null;
+      p.stuckRuns = a.stuckRuns || [];
       if (p.state !== a.state) {
         p.state = a.state;
         clearLife(p); // le cycle de vie s'efface devant tout changement d'état réel
@@ -1051,6 +1113,33 @@
   };
   const BOT_TRACKS = [['oTtTtTtTto', '.oooooooo.'], ['otTtTtTtTo', '.oooooooo.']];
 
+  // ---------- Carton de départ : plante et mug qui dépassent ----------
+  const CARTON = ['.L.L.....mm.', 'LDLDL...mMMm', '.LDL....mMMm', 'oooooooooooo', 'obbbbBBbbbbo', 'obbbbbbbbbbo', 'obbbbbbbbbbo', 'oBBBBBBBBBBo', 'oooooooooooo'];
+  const CARTON_PAL = { o: O, b: '#d9a066', B: '#b98249', L: C.plant, D: C.plantDark, m: '#f4f1ea', M: C.red };
+
+  /** Petit saut à chaque pas quand il file vers la porte. */
+  const hop = (/** @type {any} */ p, /** @type {number} */ t) => (p.hurry && p.pose === 'walk' && Math.floor(t * 10 + p.seed) % 2 ? 1 : 0);
+
+  /**
+   * Carton porté devant soi (derrière le dos de dos), avec un rebond à son apparition, et goutte de sueur en chemin.
+   * `front` : appelé après le sprite (sinon avant).
+   */
+  function drawCarry(/** @type {any} */ p, /** @type {number} */ x, /** @type {number} */ y, /** @type {number} */ w, /** @type {boolean} */ front, /** @type {number} */ t) {
+    if (!p.carton || front === (p.dir === 'up')) {
+      return;
+    }
+    const age = clock - p.carton;
+    const pop = age < 0.5 ? Math.round(Math.max(0, 6 - age * 30) * Math.abs(Math.cos(age * 14))) : 0;
+    const cx = x + Math.round((w - 12) / 2) + (p.dir === 'right' ? 3 : p.dir === 'left' ? -3 : 0);
+    ctx.drawImage(sprite(CARTON, CARTON_PAL, 'carton', p.dir === 'left'), cx, y + (p.bot ? 5 : 8) - pop);
+    if (front && p.hurry && Math.floor(t * 3) % 2 === 0) {
+      const sx = p.dir === 'left' ? x - 2 : x + w + 1;
+      px(sx, y + 2, 1, 1, '#4a9eff');
+      px(sx - 1, y + 3, 3, 2, '#4a9eff');
+      px(sx, y + 3, 1, 1, '#bfe0ff');
+    }
+  }
+
   function botRows(/** @type {any} */ b, /** @type {number} */ t) {
     const view = b.dir === 'left' || b.dir === 'right' ? 'side' : b.dir === 'up' ? 'up' : 'down';
     // Clignement bref toutes les quelques secondes.
@@ -1083,10 +1172,12 @@
     const fy = Math.round(b.y);
     // Au poste, le mini-bot est rapproché du bureau pour dépasser du dossier de la chaise.
     const lift = b.pose === 'type' ? 4 : 0;
-    const y = fy - rows.length + 1 - lift;
+    const y = fy - rows.length + 1 - lift - hop(b, t);
     ctx.fillStyle = 'rgba(43, 34, 54, 0.22)';
     ctx.fillRect(x + 1, fy - 1, 8, 2);
+    drawCarry(b, x, y, 10, false, t);
     ctx.drawImage(img, x, y);
+    drawCarry(b, x, y, 10, true, t);
     b.hit = { x, y, w: 10, h: rows.length };
     // Même bulle de travail que les agents tant que le sous-agent tourne.
     const bubble = b.bubble || (b.state === 'active' && !b.leaving ? 'work' : null);
@@ -1120,7 +1211,8 @@
   }
 
   function drawPerson(/** @type {any} */ p, /** @type {number} */ t) {
-    const grey = p.state === 'unknown';
+    // Une instance retirée du bureau reste grise jusqu'à ce que l'agent revienne.
+    const grey = p.state === 'unknown' || !!p.packing;
     const shirt = grey ? '#a3a9b8' : p.color;
     const pal = {
       o: O,
@@ -1142,13 +1234,15 @@
     const lift = p.pose === 'type' && p.dir === 'up' ? 3 : 0;
     // Derrière un bureau individuel, l'agent s'enfonce sous le plateau : jambes et fauteuil restent cachés.
     const sink = (p.pose === 'type' || p.pose === 'sit') && p.dir === 'down' && officeSeatKeys.has(`${tile.x},${tile.y}`) ? 3 : 0;
-    const y = Math.round(p.y) - rows.length + 1 + bob - lift + sink;
+    const y = Math.round(p.y) - rows.length + 1 + bob - lift + sink - hop(p, t);
     if (!sink) {
       // Ombre portée
       ctx.fillStyle = 'rgba(43, 34, 54, 0.22)';
       ctx.fillRect(x + 1, Math.round(p.y) - 1, 10, 3);
     }
+    drawCarry(p, x, y, 12, false, t);
     ctx.drawImage(img, x, y);
+    drawCarry(p, x, y, 12, true, t);
     if (christmas) {
       ctx.drawImage(sprite(SANTA_HAT, SANTA_HAT_PAL, 'santa-hat', p.dir === 'left'), x, y - 4);
     }
@@ -1235,6 +1329,10 @@
         px(x + 7, y + 5, 3, 1, '#8aa3ec');
         px(x + 8, y + 6, 1, 1, '#8aa3ec');
         px(x + 7, y + 7, 3, 1, '#8aa3ec');
+        break;
+      case 'alert':
+        px(x + 6, y + 2, 1, 4, C.red);
+        px(x + 6, y + 7, 1, 1, C.red);
         break;
       case '?':
         px(x + 5, y + 2, 3, 1, ink);
@@ -2084,6 +2182,13 @@
         });
       });
     }
+    // Poussière soulevée par un carton qui apparaît.
+    puffs = puffs.filter((d) => clock - d.t0 < 0.5);
+    for (const d of puffs) {
+      const k = (clock - d.t0) / 0.5;
+      const r = 3 + k * 7;
+      px(d.x + Math.cos(d.a) * r, d.y + Math.sin(d.a) * r * 0.6, 2, 2, `rgba(255, 255, 255, ${1 - k})`);
+    }
     for (const b of bubbles) {
       b();
     }
@@ -2104,7 +2209,17 @@
   const cardHint = document.createElement('span');
   cardHint.className = 'agent-card__hint';
   cardHint.textContent = 'Restart Claude Code to apply your changes.';
-  card.append(cardName, cardOpen, cardHint);
+  const cardDismiss = document.createElement('button');
+  cardDismiss.type = 'button';
+  cardDismiss.className = 'agent-card__open';
+  const cardDismissHint = document.createElement('span');
+  cardDismissHint.className = 'agent-card__hint';
+  cardDismissHint.textContent = 'Only hides it here. Claude Code is not affected.';
+  card.append(cardName, cardOpen, cardHint, cardDismiss, cardDismissHint);
+
+  /** Instances bloquées que l'on peut retirer du bureau : le mini-bot silencieux lui-même, ou celles d'un agent. */
+  const stuckRunsOf = (/** @type {any} */ p) =>
+    p.bot ? (p.state === 'unknown' && !p.leaving ? [p.id] : []) : p.packing ? [] : p.stuckRuns || [];
   scene.appendChild(card);
 
   // ======================================================================
@@ -2312,6 +2427,10 @@
       // Le personnage « Claude » et les mini-bots n'ont pas de fichier à ouvrir.
       cardOpen.hidden = p.builtin || p.bot;
       cardHint.hidden = p.builtin || p.bot;
+      const stuck = stuckRunsOf(p);
+      cardDismiss.hidden = !stuck.length;
+      cardDismissHint.hidden = !stuck.length;
+      cardDismiss.textContent = p.bot ? 'Dismiss from office' : stuck.length > 1 ? `Dismiss ${stuck.length} stuck runs` : 'Dismiss stuck run';
       card.hidden = false;
       placeCard();
     }
@@ -2321,6 +2440,17 @@
       openAgent(focus.p.id);
     }
     unfocus();
+  });
+  cardDismiss.addEventListener('click', () => {
+    const p = focus && focus.p;
+    unfocus();
+    const ids = p ? stuckRunsOf(p) : [];
+    if (!p || !ids.length) {
+      return;
+    }
+    ids.forEach((id) => dismissedRuns.add(id));
+    vscode.postMessage({ type: 'dismiss', ids });
+    packUp(p);
   });
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {

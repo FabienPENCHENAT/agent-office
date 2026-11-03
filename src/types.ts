@@ -31,6 +31,8 @@ export interface ActivitySignal {
   observedAt: number;
   /** Modèle utilisé, sous forme lisible (ex. « Opus 5.5 »), quand il est connu. */
   model?: string;
+  /** Instance de sous-agent qui émet ce signal (même identifiant que `SubagentRun.id`). */
+  runId?: string;
 }
 
 /** Disponibilité de la source de signaux d'un runtime. */
@@ -86,6 +88,8 @@ export interface AgentStatus {
   model?: string;
   /** Personnage « Claude » intégré, sans fichier de définition. */
   builtin?: boolean;
+  /** État inconnu dû seulement à des sous-agents silencieux : leurs instances, que l'utilisateur peut retirer du bureau. */
+  stuckRuns?: string[];
 }
 
 /** Postes de travail du bureau : trois bureaux individuels et l'open space engineering. */

@@ -299,6 +299,7 @@ function watchSettings(): void {
 interface PageMessage {
   type?: string;
   id?: unknown;
+  ids?: unknown;
   path?: unknown;
   key?: unknown;
   value?: unknown;
@@ -316,6 +317,9 @@ function onMessage(o: OfficeWindow, msg: PageMessage | undefined): void {
       break;
     case 'openAgent':
       void openAgent(o, msg.id);
+      break;
+    case 'dismiss':
+      void o.engine.dismiss(msg.ids);
       break;
     case 'chooseFolder':
       void chooseFolder(o);
