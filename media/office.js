@@ -7,6 +7,9 @@
 //    à un bureau libre de l'open space (sinon par terre dans le couloir, dos au mur) et repart par le même chemin.
 //  - Une délégation qui démarre se traduit par une visite (un seul agent) ou une réunion (plusieurs).
 //  - Une délégation terminée se traduit par une remise de copie au délégant.
+//  - Un agent qui attend une réponse de l'utilisateur (permission, question) s'assoit à son poste, main levée.
+//  - Une instance retirée du bureau par l'utilisateur fait ses cartons et sort par la porte du couloir (un agent attitré revient
+//    ensuite, les mains vides).
 // Ce qui est décoratif : le cycle de vie des agents inactifs (hamac, banc et bord du lac, discussions, promenades).
 (function () {
   'use strict';
@@ -308,6 +311,16 @@
   const bots = new Map();
   /** Sous-agents en cours au-delà des mini-bots représentés (ils attendent derrière la porte). */
   let botOverflow = 0;
+  /**
+   * Instances retirées du bureau → moment du clic. Leur mini-bot ne revient pas si un relevé en retard les liste encore ;
+   * un relevé plus récent qui les liste toujours l'emporte (le moteur a refusé, ou l'instance s'est remise au travail).
+   * @type {Map<string, number>}
+   */
+  const dismissedRuns = new Map();
+  /** Marge pour un relevé déjà en cours au moment du clic. */
+  const DISMISS_GRACE_MS = 3000;
+  /** @type {{x:number,y:number,a:number,t0:number}[]} poussière soulevée par un carton qui apparaît */
+  let puffs = [];
   /** @type {Map<string, string>} lieu de détente → agent qui l'occupe */
   const spotTaken = new Map();
   const seenStart = new Set();
@@ -353,7 +366,7 @@
   // ======================================================================
   const fmtTime = (/** @type {number|undefined} */ t) =>
     t ? new Date(t).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '';
-  const stateLabel = (/** @type {string} */ s) => ({ active: 'working', inactive: 'idle', unknown: 'unknown' })[s] || s;
+  const stateLabel = (/** @type {string} */ s) => ({ active: 'working', waiting: 'waiting for you', inactive: 'idle', unknown: 'unknown' })[s] || s;
   const rand = (/** @type {number} */ a, /** @type {number} */ b) => a + Math.random() * (b - a);
   const pick = (/** @type {any[]} */ list) => list[Math.floor(Math.random() * list.length)];
   function hash(/** @type {string} */ str) {
@@ -455,7 +468,7 @@
     const dx = target.x - p.x;
     const dy = target.y - p.y;
     const dist = Math.hypot(dx, dy);
-    const move = 72 * dt;
+    const move = (p.hurry ? 90 : 72) * dt;
     p.pose = 'walk';
     if (Math.abs(dx) > Math.abs(dy)) {
       p.dir = dx < 0 ? 'left' : 'right';
@@ -482,6 +495,16 @@
         p.pose = 'type';
         p.dir = station(p).dir;
         p.bubble = null;
+      }
+    } else if (p.state === 'waiting') {
+      // Il attend une réponse : assis à son poste, main levée.
+      const seat = station(p).seat;
+      if (!atTile(p, seat)) {
+        p.tasks.push(go(seat, 'sit', station(p).dir));
+      } else {
+        p.pose = 'sit';
+        p.dir = station(p).dir;
+        p.bubble = 'hand';
       }
     } else if (p.state === 'unknown') {
       p.path = [];
@@ -592,6 +615,9 @@
   }
   const botPose = (/** @type {any} */ spot) => (spot.desk ? 'type' : 'sit');
 
+  /** Bulle d'un état qui n'est pas « au travail » : main levée s'il attend l'utilisateur, « ? » s'il est inconnu. */
+  const waitBubble = (/** @type {string} */ state) => (state === 'waiting' ? 'hand' : state === 'unknown' ? '?' : null);
+
   /** Comportement de base d'un mini-bot : rejoindre sa place et y travailler. */
   function botBase(/** @type {any} */ b) {
     const s = b.spot;
@@ -604,7 +630,7 @@
     }
     b.pose = botPose(s);
     b.dir = s.dir;
-    b.bubble = b.state === 'unknown' ? '?' : null;
+    b.bubble = waitBubble(b.state);
   }
 
   function syncBots() {
@@ -612,6 +638,13 @@
     const seen = new Set();
     for (const h of snapshot.helpers || []) {
       seen.add(h.id);
+      const dismissedAt = dismissedRuns.get(h.id);
+      if (dismissedAt !== undefined) {
+        if (now < dismissedAt + DISMISS_GRACE_MS) {
+          continue;
+        }
+        dismissedRuns.delete(h.id);
+      }
       let b = bots.get(h.id);
       if (!b) {
         const seed = hash(h.id);
@@ -634,13 +667,18 @@
         }
       }
       if (b.leaving) {
-        // Revenu dans la liste (un autre sous-agent a fini avant lui) : il fait demi-tour.
-        Object.assign(b, { leaving: false, spot: claimSpot(b), tasks: [], cur: null, path: [] });
+        // Revenu dans la liste (un autre sous-agent a fini avant lui, ou son retrait n'a pas tenu) : il fait demi-tour.
+        Object.assign(b, { leaving: false, spot: claimSpot(b), tasks: [], cur: null, path: [], packing: false, carton: 0, hurry: false });
       }
       b.state = h.state;
       // L'agent attitré du bureau se remet au travail : le mini-bot lui laisse la place.
       if (b.spot.desk && deskBusy(b.spot.key)) {
         b.spot = claimSpot(b);
+      }
+    }
+    for (const id of dismissedRuns.keys()) {
+      if (!seen.has(id)) {
+        dismissedRuns.delete(id);
       }
     }
     for (const b of bots.values()) {
@@ -756,6 +794,58 @@
     );
   }
 
+  /**
+   * Instance retirée du bureau par l'utilisateur : surprise, elle se lève, fait ses cartons et file par la porte du couloir.
+   * Un mini-bot ne revient pas ; un agent attitré revient les mains vides, en couleur, puis reprend sa routine.
+   */
+  function packUp(/** @type {any} */ p) {
+    if (p.bot) {
+      p.leaving = true;
+      p.spot = null;
+      if (reduced()) {
+        bots.delete(p.id);
+        return;
+      }
+    } else if (reduced()) {
+      return;
+    }
+    clearLife(p);
+    Object.assign(p, { tasks: [], cur: null, path: [], activity: null, packing: true });
+    const tasks = [
+      wait(0.6, 'alert'),
+      call(() => {
+        p.pose = 'stand';
+        p.dir = 'down';
+      }),
+      wait(0.45, null),
+      call(() => {
+        p.carton = clock;
+        for (let i = 0; i < 10; i++) {
+          puffs.push({ x: p.x, y: p.y - 8, a: (i / 10) * Math.PI * 2, t0: clock });
+        }
+      }),
+      wait(0.8, null),
+      call(() => {
+        p.hurry = true;
+      }),
+      go(SIDE_DOOR, 'stand'),
+      { k: 'exit' },
+    ];
+    if (!p.bot) {
+      const back = pick(WANDER.filter((t) => t.y <= CORRIDOR.y1 && t.x >= COLS - 12)) || SIDE_DOOR;
+      tasks.push(
+        call(() => Object.assign(p, { gone: false, carton: 0, hurry: false })),
+        wait(1.4, null),
+        call(() => {
+          p.packing = false;
+        }),
+        go(back, 'stand', 'down'),
+        wait(3, 'coffee'),
+      );
+    }
+    p.tasks = scripted(tasks);
+  }
+
   /** Détecte les délégations nouvelles (lancement) et terminées (remise de copie). */
   function handleInteractions() {
     const now = snapshot.generatedAt;
@@ -810,6 +900,7 @@
       p.color = colors.get(a.id);
       p.builtin = !!a.builtin;
       p.model = a.model || null;
+      p.dismissableRuns = a.dismissableRuns || [];
       if (p.state !== a.state) {
         p.state = a.state;
         clearLife(p); // le cycle de vie s'efface devant tout changement d'état réel
@@ -842,11 +933,11 @@
       p.pair = null;
       p.flash = null;
       p.activity = null;
-      if (p.state === 'active') {
+      if (p.state === 'active' || p.state === 'waiting') {
         Object.assign(p, feet(station(p).seat));
-        p.pose = 'type';
+        p.pose = p.state === 'active' ? 'type' : 'sit';
         p.dir = station(p).dir;
-        p.bubble = null;
+        p.bubble = waitBubble(p.state);
       } else {
         if (p.state === 'inactive' || !p.placed) {
           const s = STATIC_SPOTS[idle.indexOf(p) % STATIC_SPOTS.length];
@@ -871,7 +962,7 @@
       Object.assign(b, feet(b.spot.tile));
       b.pose = botPose(b.spot);
       b.dir = b.spot.dir;
-      b.bubble = b.state === 'unknown' ? '?' : null;
+      b.bubble = waitBubble(b.state);
     }
     if (focus) {
       lookAtViewer(focus.p);
@@ -1051,6 +1142,33 @@
   };
   const BOT_TRACKS = [['oTtTtTtTto', '.oooooooo.'], ['otTtTtTtTo', '.oooooooo.']];
 
+  // ---------- Carton de départ : plante et mug qui dépassent ----------
+  const CARTON = ['.L.L.....mm.', 'LDLDL...mMMm', '.LDL....mMMm', 'oooooooooooo', 'obbbbBBbbbbo', 'obbbbbbbbbbo', 'obbbbbbbbbbo', 'oBBBBBBBBBBo', 'oooooooooooo'];
+  const CARTON_PAL = { o: O, b: '#d9a066', B: '#b98249', L: C.plant, D: C.plantDark, m: '#f4f1ea', M: C.red };
+
+  /** Petit saut à chaque pas quand il file vers la porte. */
+  const hop = (/** @type {any} */ p, /** @type {number} */ t) => (p.hurry && p.pose === 'walk' && Math.floor(t * 10 + p.seed) % 2 ? 1 : 0);
+
+  /**
+   * Carton porté devant soi (derrière le dos de dos), avec un rebond à son apparition, et goutte de sueur en chemin.
+   * `front` : appelé après le sprite (sinon avant).
+   */
+  function drawCarry(/** @type {any} */ p, /** @type {number} */ x, /** @type {number} */ y, /** @type {number} */ w, /** @type {boolean} */ front, /** @type {number} */ t) {
+    if (!p.carton || front === (p.dir === 'up')) {
+      return;
+    }
+    const age = clock - p.carton;
+    const pop = age < 0.5 ? Math.round(Math.max(0, 6 - age * 30) * Math.abs(Math.cos(age * 14))) : 0;
+    const cx = x + Math.round((w - 12) / 2) + (p.dir === 'right' ? 3 : p.dir === 'left' ? -3 : 0);
+    ctx.drawImage(sprite(CARTON, CARTON_PAL, 'carton', p.dir === 'left'), cx, y + (p.bot ? 5 : 8) - pop);
+    if (front && p.hurry && Math.floor(t * 3) % 2 === 0) {
+      const sx = p.dir === 'left' ? x - 2 : x + w + 1;
+      px(sx, y + 2, 1, 1, '#4a9eff');
+      px(sx - 1, y + 3, 3, 2, '#4a9eff');
+      px(sx, y + 3, 1, 1, '#bfe0ff');
+    }
+  }
+
   function botRows(/** @type {any} */ b, /** @type {number} */ t) {
     const view = b.dir === 'left' || b.dir === 'right' ? 'side' : b.dir === 'up' ? 'up' : 'down';
     // Clignement bref toutes les quelques secondes.
@@ -1062,7 +1180,7 @@
 
   function drawBot(/** @type {any} */ b, /** @type {number} */ t) {
     const grey = b.state === 'unknown';
-    const working = !grey && !b.leaving && (b.pose === 'sit' || b.pose === 'type');
+    const working = b.state === 'active' && !b.leaving && (b.pose === 'sit' || b.pose === 'type');
     const accent = grey ? '#a3a9b8' : b.color;
     // Le voyant de la caisse clignote pendant le travail.
     const glow = working && !reduced() && Math.floor(t * 3 + b.seed) % 2 === 0;
@@ -1083,10 +1201,12 @@
     const fy = Math.round(b.y);
     // Au poste, le mini-bot est rapproché du bureau pour dépasser du dossier de la chaise.
     const lift = b.pose === 'type' ? 4 : 0;
-    const y = fy - rows.length + 1 - lift;
+    const y = fy - rows.length + 1 - lift - hop(b, t);
     ctx.fillStyle = 'rgba(43, 34, 54, 0.22)';
     ctx.fillRect(x + 1, fy - 1, 8, 2);
+    drawCarry(b, x, y, 10, false, t);
     ctx.drawImage(img, x, y);
+    drawCarry(b, x, y, 10, true, t);
     b.hit = { x, y, w: 10, h: rows.length };
     // Même bulle de travail que les agents tant que le sous-agent tourne.
     const bubble = b.bubble || (b.state === 'active' && !b.leaving ? 'work' : null);
@@ -1120,7 +1240,8 @@
   }
 
   function drawPerson(/** @type {any} */ p, /** @type {number} */ t) {
-    const grey = p.state === 'unknown';
+    // Une instance retirée du bureau reste grise jusqu'à ce que l'agent revienne.
+    const grey = p.state === 'unknown' || !!p.packing;
     const shirt = grey ? '#a3a9b8' : p.color;
     const pal = {
       o: O,
@@ -1142,13 +1263,15 @@
     const lift = p.pose === 'type' && p.dir === 'up' ? 3 : 0;
     // Derrière un bureau individuel, l'agent s'enfonce sous le plateau : jambes et fauteuil restent cachés.
     const sink = (p.pose === 'type' || p.pose === 'sit') && p.dir === 'down' && officeSeatKeys.has(`${tile.x},${tile.y}`) ? 3 : 0;
-    const y = Math.round(p.y) - rows.length + 1 + bob - lift + sink;
+    const y = Math.round(p.y) - rows.length + 1 + bob - lift + sink - hop(p, t);
     if (!sink) {
       // Ombre portée
       ctx.fillStyle = 'rgba(43, 34, 54, 0.22)';
       ctx.fillRect(x + 1, Math.round(p.y) - 1, 10, 3);
     }
+    drawCarry(p, x, y, 12, false, t);
     ctx.drawImage(img, x, y);
+    drawCarry(p, x, y, 12, true, t);
     if (christmas) {
       ctx.drawImage(sprite(SANTA_HAT, SANTA_HAT_PAL, 'santa-hat', p.dir === 'left'), x, y - 4);
     }
@@ -1167,7 +1290,8 @@
       }
       kind = 'talk';
     }
-    const bg = kind === 'check' ? '#d9f6cf' : kind === 'work' ? '#dcf7e6' : kind === 'meeting' ? '#e6ddf7' : C.white;
+    const bg =
+      kind === 'check' ? '#d9f6cf' : kind === 'work' ? '#dcf7e6' : kind === 'meeting' ? '#e6ddf7' : kind === 'hand' ? '#ffe2a8' : C.white;
     box(x, y, 13, 10, bg);
     px(x + 2, y + 9, 4, 1, bg);
     px(x + 2, y + 9, 1, 2, O);
@@ -1235,6 +1359,22 @@
         px(x + 7, y + 5, 3, 1, '#8aa3ec');
         px(x + 8, y + 6, 1, 1, '#8aa3ec');
         px(x + 7, y + 7, 3, 1, '#8aa3ec');
+        break;
+      case 'hand': {
+        // Main levée, qui s'agite un peu : « j'ai besoin de toi ».
+        const skin = '#c9763f';
+        const k = !reduced() && Math.floor(t * 2) % 2 ? 1 : 0;
+        px(x + 4 + k, y + 2, 1, 3, skin);
+        px(x + 6 + k, y + 1, 1, 4, skin);
+        px(x + 8 + k, y + 2, 1, 3, skin);
+        px(x + 3 + k, y + 5, 1, 2, skin);
+        px(x + 4 + k, y + 5, 5, 3, skin);
+        px(x + 4 + k, y + 8, 5, 1, '#8a4a22');
+        break;
+      }
+      case 'alert':
+        px(x + 6, y + 2, 1, 4, C.red);
+        px(x + 6, y + 7, 1, 1, C.red);
         break;
       case '?':
         px(x + 5, y + 2, 3, 1, ink);
@@ -2084,6 +2224,13 @@
         });
       });
     }
+    // Poussière soulevée par un carton qui apparaît.
+    puffs = puffs.filter((d) => clock - d.t0 < 0.5);
+    for (const d of puffs) {
+      const k = (clock - d.t0) / 0.5;
+      const r = 3 + k * 7;
+      px(d.x + Math.cos(d.a) * r, d.y + Math.sin(d.a) * r * 0.6, 2, 2, `rgba(255, 255, 255, ${1 - k})`);
+    }
     for (const b of bubbles) {
       b();
     }
@@ -2104,7 +2251,20 @@
   const cardHint = document.createElement('span');
   cardHint.className = 'agent-card__hint';
   cardHint.textContent = 'Restart Claude Code to apply your changes.';
-  card.append(cardName, cardOpen, cardHint);
+  const cardDismiss = document.createElement('button');
+  cardDismiss.type = 'button';
+  cardDismiss.className = 'agent-card__open';
+  const cardDismissHint = document.createElement('span');
+  cardDismissHint.className = 'agent-card__hint';
+  cardDismissHint.textContent = 'Only hides it here. Claude Code is not affected.';
+  const cardWaiting = document.createElement('span');
+  cardWaiting.className = 'agent-card__hint';
+  cardWaiting.textContent = 'Waiting for your answer in Claude Code.';
+  card.append(cardName, cardWaiting, cardOpen, cardHint, cardDismiss, cardDismissHint);
+
+  /** Instances grises que l'on peut retirer du bureau : le mini-bot lui-même, ou celles d'un agent. */
+  const dismissableOf = (/** @type {any} */ p) =>
+    p.leaving || p.packing ? [] : p.bot ? (p.state === 'unknown' ? [p.id] : []) : p.dismissableRuns || [];
   scene.appendChild(card);
 
   // ======================================================================
@@ -2312,6 +2472,11 @@
       // Le personnage « Claude » et les mini-bots n'ont pas de fichier à ouvrir.
       cardOpen.hidden = p.builtin || p.bot;
       cardHint.hidden = p.builtin || p.bot;
+      cardWaiting.hidden = p.state !== 'waiting';
+      const runs = dismissableOf(p);
+      cardDismiss.hidden = !runs.length;
+      cardDismissHint.hidden = !runs.length;
+      cardDismiss.textContent = p.bot ? 'Dismiss from office' : runs.length > 1 ? `Dismiss ${runs.length} stuck runs` : 'Dismiss stuck run';
       card.hidden = false;
       placeCard();
     }
@@ -2321,6 +2486,17 @@
       openAgent(focus.p.id);
     }
     unfocus();
+  });
+  cardDismiss.addEventListener('click', () => {
+    const p = focus && focus.p;
+    unfocus();
+    const ids = p ? dismissableOf(p) : [];
+    if (!p || !ids.length) {
+      return;
+    }
+    ids.forEach((id) => dismissedRuns.set(id, Date.now()));
+    vscode.postMessage({ type: 'dismiss', ids });
+    packUp(p);
   });
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
@@ -2410,7 +2586,7 @@
     }
     const helpers = snapshot.helpers || [];
     if (helpers.length) {
-      const names = helpers.map((/** @type {any} */ h) => h.name + (h.state === 'unknown' ? ' (unknown)' : '')).join(', ');
+      const names = helpers.map((/** @type {any} */ h) => h.name + (h.state === 'active' ? '' : ` (${stateLabel(h.state)})`)).join(', ');
       const waiting = snapshot.helperOverflow ? ` ${snapshot.helperOverflow} more waiting behind the door.` : '';
       lines.push(`${helpers.length} subagent(s) at work as mini-bots: ${names}.${waiting}`);
     }

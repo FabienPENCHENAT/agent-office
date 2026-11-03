@@ -66,8 +66,9 @@ function render(o: OfficeWindow, update: OfficeUpdate | undefined = o.engine.las
 /** Badge du Dock (macOS) : allumé tant qu'un agent travaille dans l'une des fenêtres ouvertes. */
 function updateBadge(): void {
   if (isMac) {
-    const working = [...offices.values()].some((w) => w.engine.last?.summary.kind === 'active');
-    app.dock?.setBadge(working ? '●' : '');
+    const kinds = [...offices.values()].map((w) => w.engine.last?.summary.kind);
+    // « ! » : un agent attend une réponse ; « ● » : un agent travaille.
+    app.dock?.setBadge(kinds.includes('waiting') ? '!' : kinds.includes('active') ? '●' : '');
   }
 }
 
@@ -299,6 +300,7 @@ function watchSettings(): void {
 interface PageMessage {
   type?: string;
   id?: unknown;
+  ids?: unknown;
   path?: unknown;
   key?: unknown;
   value?: unknown;
@@ -316,6 +318,9 @@ function onMessage(o: OfficeWindow, msg: PageMessage | undefined): void {
       break;
     case 'openAgent':
       void openAgent(o, msg.id);
+      break;
+    case 'dismiss':
+      void o.engine.dismiss(msg.ids);
       break;
     case 'chooseFolder':
       void chooseFolder(o);

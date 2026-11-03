@@ -4,10 +4,12 @@ import * as os from 'os';
 import * as path from 'path';
 import { test } from 'node:test';
 import { DEFAULT_AGENT, definitionSources, discoverDefinitions, parseFrontmatter, withDefaultAgent } from '../discovery/agentDefinitions';
+import { OfficeEngine, OfficeUpdate } from '../core/engine';
 import { panelSetting, resolveSettings } from '../core/settings';
 import { dropRecent, MAX_RECENTS, projectFolders, pushRecent, readSettingsFile, readState, writeSetting, writeState } from '../standalone/store';
 import { ClaudeCodeAdapter, cwdMatcher, modelLabel, projectDirName } from '../runtime/claudeCode';
 import { readCopilot } from '../runtime/copilot';
+import { withoutDismissed } from '../state/dismiss';
 import { normalize } from '../state/normalize';
 import { winterDecor } from '../state/season';
 import { roleOf } from '../state/placement';
@@ -464,4 +466,125 @@ test('standalone recents: most recent first, no duplicates, bounded, removable, 
   assert.deepEqual(readState(file), state);
   fs.writeFileSync(file, '{ nope');
   assert.deepEqual(readState(file), { recents: [] });
+});
+
+test('retirer du bureau : dès qu\'un agent est gris à cause de sous-agents, jamais s\'il attend une réponse', () => {
+  const sig = (agentName: string, state: 'active' | 'idle' | 'waiting' | 'unknown', runId?: string) => ({
+    runtime: 'claude-code' as const,
+    agentName,
+    state,
+    observedAt: NOW,
+    ...(runId ? { runId } : {}),
+  });
+  const [lead, pm, qa, ux, dev] = normalize(
+    [def('tech-lead'), def('pm'), def('qa'), def('ux'), def('dev')],
+    [
+      okClaude([
+        sig('tech-lead', 'unknown', 's/a'),
+        sig('tech-lead', 'unknown', 's/b'),
+        sig('pm', 'unknown', 's/c'),
+        sig('pm', 'unknown'), // session principale non concluante : rien à retirer
+        sig('qa', 'unknown', 's/d'),
+        sig('qa', 'active', 's/e'), // au travail, donc pas gris
+        sig('ux', 'waiting', 's/g'),
+        sig('ux', 'unknown', 's/h'), // attend une réponse : jamais retirable
+        sig('dev', 'active', 's/i'),
+      ]),
+    ],
+  );
+  assert.deepEqual(lead.dismissableRuns, ['s/a', 's/b']);
+  assert.equal(pm.dismissableRuns, undefined);
+  assert.equal(qa.dismissableRuns, undefined);
+  assert.equal(ux.state, 'waiting');
+  assert.equal(ux.dismissableRuns, undefined);
+  assert.equal(dev.dismissableRuns, undefined);
+
+  const report: RuntimeReport = {
+    ...okClaude([sig('tech-lead', 'unknown', 's/a'), sig('tech-lead', 'idle')]),
+    subagents: [{ id: 's/a', agentType: 'tech-lead', state: 'unknown', startedAt: NOW }],
+  };
+  const kept = withoutDismissed(report, new Set(['s/a']));
+  assert.deepEqual(kept.signals.map((s) => s.state), ['idle']);
+  assert.deepEqual(kept.subagents, []);
+  assert.equal(withoutDismissed(report, new Set()), report);
+});
+
+test('retirer du bureau : le moteur n\'accepte que des instances grises et oublie celles qui finissent ou reprennent', async () => {
+  const { dir, proj, session } = claudeFixture();
+  const now = Date.now();
+  session(process.pid, 's1', 'idle');
+  session(1, 's2', 'waiting'); // processus 1 (launchd / init) : toujours vivant
+  write(path.join(proj, 's1.jsonl'), '{"type":"agent-setting","agentSetting":"pm"}\n');
+  write(path.join(proj, 's2.jsonl'), '{"type":"user"}\n');
+  write(path.join(proj, 's2', 'subagents', 'agent-w.meta.json'), JSON.stringify({ agentType: 'Plan' }), now - 60_000);
+  write(path.join(proj, 's2', 'subagents', 'agent-w.jsonl'), '{}', now - 60_000);
+  write(path.join(dir, 'agents', 'pm.md'), '---\nname: pm\n---\n');
+  write(path.join(dir, 'agents', 'tech-lead.md'), '---\nname: tech-lead\n---\n');
+  const sub = path.join(proj, 's1', 'subagents');
+  const run = (id: string, agentType: string, age: number, finished = false) => {
+    write(path.join(sub, `${id}.meta.json`), JSON.stringify({ agentType, ...(finished ? { finished } : {}) }), now - age);
+    write(path.join(sub, `${id}.jsonl`), '{}', now - age);
+  };
+  run('agent-a', 'tech-lead', 30 * 60_000);
+  run('agent-b', 'Explore', 30 * 60_000);
+  run('agent-c', 'Explore', 1_000);
+  let last: OfficeUpdate | undefined;
+  const engine = new OfficeEngine({
+    settings: () => resolveSettings({ claudeConfigDir: dir, showDefaultClaude: false }),
+    projectDirs: () => [],
+    onUpdate: (u) => {
+      last = u;
+    },
+  });
+  await engine.tick();
+  const lead = () => last?.snapshot.slots.find((s) => s.agent?.name === 'tech-lead')?.agent;
+  assert.equal(lead()?.state, 'unknown');
+  assert.deepEqual(lead()?.dismissableRuns, ['s1/agent-a']);
+  assert.deepEqual(last?.snapshot.helpers.map((h) => h.id).sort(), ['s1/agent-b', 's1/agent-c', 's2/agent-w']);
+
+  // Une instance active ou qui attend l'utilisateur, un identifiant inconnu ou une valeur invalide sont ignorés.
+  await engine.dismiss(['s1/agent-a', 's1/agent-b', 's1/agent-c', 's2/agent-w', 's1/nope', 42]);
+  assert.equal(lead()?.state, 'inactive');
+  assert.deepEqual(last?.snapshot.helpers.map((h) => h.id).sort(), ['s1/agent-c', 's2/agent-w']);
+
+  // L'instance retirée se remet à écrire : elle n'était pas perdue, elle revient au bureau.
+  run('agent-b', 'Explore', 1_000);
+  await engine.tick();
+  assert.deepEqual(last?.snapshot.helpers.map((h) => h.id).sort(), ['s1/agent-b', 's1/agent-c', 's2/agent-w']);
+
+  // L'instance retirée se termine puis redémarre sous le même nom : elle n'est plus masquée.
+  run('agent-a', 'tech-lead', 30 * 60_000, true);
+  await engine.tick();
+  run('agent-a', 'tech-lead', 25 * 60_000);
+  await engine.tick();
+  assert.equal(lead()?.state, 'unknown');
+});
+
+test('attente de l\'utilisateur : session « waiting », ses sous-agents muets sont en attente', async () => {
+  const { dir, proj, session } = claudeFixture();
+  session(100, 's-wait', 'waiting');
+  session(200, 's-busy', 'busy');
+  session(300, 's-idle', 'idle');
+  write(path.join(proj, 's-wait.jsonl'), '{"type":"agent-setting","agentSetting":"pm"}\n');
+  write(path.join(proj, 's-busy.jsonl'), '{"type":"user"}\n');
+  write(path.join(proj, 's-idle.jsonl'), '{"type":"user"}\n');
+  const sub = (sessionId: string, id: string, agentType: string, age: number) => {
+    write(path.join(proj, sessionId, 'subagents', `${id}.meta.json`), JSON.stringify({ agentType }), NOW - age);
+    write(path.join(proj, sessionId, 'subagents', `${id}.jsonl`), '{}', NOW - age);
+  };
+  sub('s-wait', 'agent-a', 'tech-lead', 2 * 60_000); // muet depuis 2 min : attend la réponse
+  sub('s-wait', 'agent-b', 'Explore', 5_000); // vient d'écrire : travaille encore
+  sub('s-busy', 'agent-c', 'qa', 30 * 60_000); // silencieux ailleurs : inconnu
+  sub('s-idle', 'agent-d', 'ux', 30 * 60_000);
+  const adapter = new ClaudeCodeAdapter({ claudeDir: dir, subagentSilenceMs: 20 * 60_000, now: () => NOW, isPidAlive: () => true });
+  const report = await adapter.read();
+  const runs = Object.fromEntries((report.subagents ?? []).map((r) => [r.agentType, r.state]));
+  assert.deepEqual(runs, { 'tech-lead': 'waiting', Explore: 'active', qa: 'unknown', ux: 'unknown' });
+  assert.equal(report.signals.find((s) => s.agentName === 'pm')?.state, 'waiting');
+
+  const snap = buildSnapshot([def('pm'), def('dev')], [report], NOW);
+  assert.equal(snap.slots.find((s) => s.agent?.name === 'pm')?.agent?.state, 'waiting');
+  const sum = summarize(snap);
+  assert.equal(sum.kind, 'waiting');
+  assert.equal(sum.text, 'Waiting for you: pm, tech-lead');
 });
