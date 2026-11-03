@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, MenuItemConstructorOptions, net, protocol, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, MenuItemConstructorOptions, nativeImage, NativeImage, net, protocol, shell } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
 import { pathToFileURL } from 'url';
@@ -29,6 +29,8 @@ interface OfficeWindow {
   win: BrowserWindow;
   engine: OfficeEngine;
   folder?: string;
+  /** Icône affichée pour cette fenêtre dans la barre des tâches (Windows, Linux). */
+  activity?: Activity;
 }
 
 const offices = new Map<number, OfficeWindow>();
@@ -60,15 +62,46 @@ function render(o: OfficeWindow, update: OfficeUpdate | undefined = o.engine.las
   }
   send(o, { type: 'snapshot', ...update });
   updateTitle(o);
-  updateBadge();
+  updateIcons(o);
 }
 
-/** Badge du Dock (macOS) : allumé tant qu'un agent travaille dans l'une des fenêtres ouvertes. */
-function updateBadge(): void {
+/** État montré par l'icône : un agent attend une réponse, un agent travaille, ou personne ne travaille. */
+type Activity = 'waiting' | 'working' | 'idle';
+
+function activityOf(windows: OfficeWindow[]): Activity {
+  const kinds = windows.map((w) => w.engine.last?.summary.kind);
+  return kinds.includes('waiting') ? 'waiting' : kinds.includes('active') ? 'working' : 'idle';
+}
+
+const activityIcons = new Map<Activity, NativeImage>();
+function activityIcon(activity: Activity): NativeImage {
+  let icon = activityIcons.get(activity);
+  if (!icon) {
+    icon = nativeImage.createFromPath(path.join(MEDIA, 'dock', `${activity}.png`));
+    activityIcons.set(activity, icon);
+  }
+  return icon;
+}
+
+let dockActivity: Activity | undefined;
+
+/**
+ * Icône qui suit l'état des agents. macOS : celle du Dock, pour toutes les fenêtres ouvertes (aucune fenêtre : personne
+ * ne travaille). Ailleurs : celle de chaque fenêtre dans la barre des tâches, pour son propre dossier.
+ */
+function updateIcons(o?: OfficeWindow): void {
   if (isMac) {
-    const kinds = [...offices.values()].map((w) => w.engine.last?.summary.kind);
-    // « ! » : un agent attend une réponse ; « ● » : un agent travaille.
-    app.dock?.setBadge(kinds.includes('waiting') ? '!' : kinds.includes('active') ? '●' : '');
+    const activity = activityOf([...offices.values()]);
+    if (activity !== dockActivity) {
+      dockActivity = activity;
+      app.dock?.setIcon(activityIcon(activity));
+    }
+  } else if (o && !o.win.isDestroyed()) {
+    const activity = activityOf([o]);
+    if (activity !== o.activity) {
+      o.activity = activity;
+      o.win.setIcon(activityIcon(activity));
+    }
   }
 }
 
@@ -212,7 +245,7 @@ function createWindow(): OfficeWindow {
   win.on('closed', () => {
     o.engine.stop();
     offices.delete(id);
-    updateBadge();
+    updateIcons();
   });
   void win.loadURL(`${SCHEME}://app/`);
   o.engine.start();
