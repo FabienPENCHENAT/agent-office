@@ -26,19 +26,20 @@ A tiny pixel-art office that lives in a VS Code panel, or in its own desktop win
 - **Zero setup**: agents, desks and colors are detected automatically.
 - **Christmas decorations** from December 1 to January 6: snow outside the windows and on the lounge, garlands in the corridors, a Christmas tree, presents and Santa hats.
 - **Claude itself has a desk**: when you talk to Claude Code without a custom agent, a **Claude** character works, delegates to your agents, and shows the model it's using (e.g. Opus 5.5). No custom agent needed to see the office come alive.
+- **Mini-bots for the other subagents**: built-in subagents (Explore, Plan, general-purpose…) and extra copies of an agent already at work roll in as small tracked robots and take a free desk.
 - **Edit an agent in one click**: click a character, it turns to face you, and **Edit agent file** opens its `.md` in the editor. Restart Claude Code to apply your changes.
 - **Private by design**: 100% local and read-only. No code, prompt or conversation is ever displayed.
 
 ## Getting started
 
-### 1. Make sure you have custom agents
+### 1. Add custom agents (optional)
 
-> [!IMPORTANT]
-> **Agent Office shows your Claude Code _custom agents_. No custom agents, nobody in the office.**
+> [!NOTE]
+> **The office works without any custom agent.** Claude itself has a desk, and the subagents it launches show up as mini-bots.
 >
-> A custom agent is a `.md` file in `~/.claude/agents/` (for all your projects) or in your project's `.claude/agents/` folder. You can create them with the `/agents` command in [Claude Code](https://docs.claude.com/en/docs/claude-code/overview).
+> Custom agents give the office its team: each one gets its own character, desk and color. A custom agent is a `.md` file in `~/.claude/agents/` (for all your projects) or in your project's `.claude/agents/` folder. You can create them with the `/agents` command in [Claude Code](https://docs.claude.com/en/docs/claude-code/overview).
 
-**No agents yet?** Paste the prompt below into Claude Code. It creates a complete development team of 9 agents, like the one in the animation, with one simple rule: you only talk to the product manager, and no code changes without your explicit “GO”.
+**Want a team?** Paste the prompt below into Claude Code. It creates a complete development team of 9 agents, like the one in the animation, with one simple rule: you only talk to the product manager, and no code changes without your explicit “GO”.
 
 <details>
 <summary><b>📋 Prompt: create a complete development team (9 agents)</b></summary>
@@ -182,22 +183,20 @@ Installers are not code-signed. On macOS, the first launch is blocked: open *Sys
 
 ### 3. Put your agents to work
 
-Start Claude Code with one of your agents, for example:
+Start Claude Code as usual, or with one of your agents, for example:
 
 ```bash
-claude --agent product-manager
+claude                          # the Claude character works
+claude --agent product-manager  # the product manager works
 ```
 
-Ask it for something. As soon as it starts, its character walks to its desk with a 💻 bubble, and the status bar at the bottom of VS Code (or the title of the desktop window) reads *“Active agent: product-manager”*.
-
-> [!TIP]
-> Talking to Claude directly, without `--agent`, doesn't light up any desk for Claude itself. Only the custom agents it launches as subagents show up.
+Ask it for something. As soon as it starts, its character walks to its desk with a 💻 bubble, and the status bar at the bottom of VS Code (or the title of the desktop window) reads *“Active agent: product-manager”*. When it delegates, the custom agents it launches walk to their desks, and the other subagents roll in as mini-bots.
 
 ## How it works
 
 Everything is automatic. The extension:
 
-1. **finds your agents** in `~/.claude/agents/` and in the open project's `.claude/agents/`, and shows up to 10 of them, plus a **Claude** character for the sessions you start without `--agent`;
+1. **finds your agents** in `~/.claude/agents/` and in the open project's `.claude/agents/`, and shows up to 10 of them, plus a **Claude** character for the sessions you start without `--agent`, and a **mini-bot** for each running subagent that has no character of its own;
 2. **gives each one a desk** based on its name, or its description when the name says nothing about the role:
 
    | Name or description mentions… | Desk |
