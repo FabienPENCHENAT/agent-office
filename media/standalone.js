@@ -34,11 +34,16 @@
   const list = el('ul', 'fb-list');
   menu.append(summary, list);
   const hint = el('span', 'fb-hint', 'Pick a folder to see its project agents.');
+  // Ouvre le panneau des réglages de media/office.js, comme le bouton ⚙ de la vue dans VS Code.
+  const settings = button('fb-btn fb-settings', '⚙\uFE0E', 'Office settings', () => window.postMessage({ type: 'toggleSettings' }, '*'));
+  settings.dataset.settingsToggle = '';
+  settings.setAttribute('aria-label', 'Office settings');
   bar.append(
     menu,
     button('fb-btn', 'Open folder…', 'Use another working folder in this window', () => send({ type: 'chooseFolder' })),
     button('fb-btn', 'New window…', 'Open another folder in a new window', () => send({ type: 'newWindow' })),
     hint,
+    settings,
   );
   document.body.prepend(bar);
 

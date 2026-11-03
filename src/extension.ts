@@ -104,6 +104,14 @@ class OfficeController implements vscode.WebviewViewProvider, vscode.Disposable 
     }
   }
 
+  /** Ouvre ou ferme le panneau des réglages de l'office (bouton ⚙ de la barre de titre de la vue). */
+  async toggleSettings(): Promise<void> {
+    if (!this.view) {
+      await vscode.commands.executeCommand('agentOffice.office.focus');
+    }
+    void this.view?.webview.postMessage({ type: 'toggleSettings' });
+  }
+
   private postMotion(): void {
     void this.view?.webview.postMessage({ type: 'motion', reduceMotion: reduceMotion() });
   }
@@ -147,6 +155,7 @@ export function activate(context: vscode.ExtensionContext): void {
       vscode.commands.executeCommand('workbench.view.extension.agentOffice'),
     ),
     vscode.commands.registerCommand('agentOffice.refresh', () => controller.tick()),
+    vscode.commands.registerCommand('agentOffice.settings', () => controller.toggleSettings()),
     vscode.workspace.onDidChangeConfiguration((e) => {
       if (e.affectsConfiguration('agentOffice') || e.affectsConfiguration('workbench.reduceMotion')) {
         controller.onConfigChanged();

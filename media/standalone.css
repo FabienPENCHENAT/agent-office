@@ -67,6 +67,7 @@
 .fb-btn:hover, .fb-icon:hover, .fb-pick:hover { background: var(--fb-hover); }
 .fb-hint { color: var(--vscode-descriptionForeground); font-size: 0.9em; }
 .fb-hint[hidden] { display: none; }
+.fb-settings { margin-left: auto; }
 .fb-list {
   position: absolute;
   top: calc(100% + 4px);

@@ -93,7 +93,7 @@ Signals are read every `agentOffice.pollIntervalSeconds` seconds (2 by default).
 
 ## Settings panel (⚙)
 
-A gear button in the top-right corner of the scene opens a panel with four settings: **Sessions shown** (`sessionScope`), **Show Claude** (`showDefaultClaude`), **Grey after** (`subagentSilenceMinutes`: 5, 10, 20 or 60; a different value set elsewhere is kept and shown) and **Seasonal decor** (`seasonalDecor`). The other settings are only in Settings or the settings file.
+The panel opens in the top-right corner of the scene; nothing is drawn on the scene itself. The host toggles it by posting `{ type: 'toggleSettings' }`: in VS Code, the `agentOffice.settings` command (⚙ in the view's title bar, `view/title` menu); in the desktop app, the ⚙ button of the folder bar (`media/standalone.js`). Escape or a click elsewhere closes it. It holds four settings: **Sessions shown** (`sessionScope`), **Show Claude** (`showDefaultClaude`), **Grey after** (`subagentSilenceMinutes`: 5, 10, 20 or 60; a different value set elsewhere is kept and shown) and **Seasonal decor** (`seasonalDecor`). The other settings are only in Settings or the settings file.
 
 - Each snapshot carries the current values (`settings`) and the folders the sessions are filtered on (`scope`), so the panel and the footer line “Showing Claude Code sessions from … only” stay in sync with changes made elsewhere.
 - A change sends `{ type: 'setSetting', key, value }`. The host validates it with `panelSetting()` (`core/settings.ts`): only these four keys and their listed values are accepted.

@@ -51,8 +51,23 @@
         "command": "agentOffice.refresh",
         "title": "Refresh agent status",
         "category": "Agent Office"
+      },
+      {
+        "command": "agentOffice.settings",
+        "title": "Office settings",
+        "category": "Agent Office",
+        "icon": "$(gear)"
       }
     ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "agentOffice.settings",
+          "when": "view == agentOffice.office",
+          "group": "navigation"
+        }
+      ]
+    },
     "configuration": {
       "title": "Agent Office",
       "properties": {

@@ -82,28 +82,10 @@ canvas {
 .agent-card__open:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 1px; }
 .agent-card__hint { font-size: 0.85em; color: var(--vscode-descriptionForeground); }
 
-/* Roue crantée et panneau des réglages, en haut à droite de la scène. */
-.gear {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  z-index: 2;
-  width: 26px;
-  height: 26px;
-  padding: 0;
-  border: 0;
-  border-radius: 4px;
-  font-size: 17px;
-  line-height: 26px;
-  color: #fff;
-  background: rgba(43, 34, 54, 0.55);
-  cursor: pointer;
-}
-.gear:hover, .gear[aria-expanded="true"] { background: rgba(43, 34, 54, 0.85); }
-.gear:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 1px; }
+/* Panneau des réglages, en haut à droite de la scène (ouvert depuis l'hôte). */
 .settings {
   position: absolute;
-  top: 36px;
+  top: 6px;
   right: 6px;
   z-index: 3;
   display: flex;

@@ -2108,15 +2108,9 @@
   scene.appendChild(card);
 
   // ======================================================================
-  // Roue crantée : les quelques réglages utiles, sans passer par les paramètres
+  // Réglages : les quelques réglages utiles, sans passer par les paramètres. Le panneau s'ouvre depuis
+  // l'hôte (bouton ⚙ de la barre de titre de la vue dans VS Code, de la barre de dossier dans l'app).
   // ======================================================================
-  const gear = document.createElement('button');
-  gear.type = 'button';
-  gear.className = 'gear';
-  gear.textContent = '\u2699\uFE0E';
-  gear.title = 'Office settings';
-  gear.setAttribute('aria-label', 'Office settings');
-  gear.setAttribute('aria-expanded', 'false');
   const panel = document.createElement('div');
   panel.className = 'settings';
   panel.hidden = true;
@@ -2172,23 +2166,33 @@
   );
   settingHint().textContent = 'A silent subagent turns grey with a “?”.';
   const seasonBox = /** @type {HTMLInputElement} */ (settingRow('Seasonal decor', checkbox(), 'seasonalDecor', (c) => c.checked));
-  scene.append(gear, panel);
+  scene.appendChild(panel);
 
+  /** Élément qui avait le focus avant l'ouverture du panneau, pour l'y rendre à la fermeture. */
+  /** @type {Element | null} */
+  let focusBeforeSettings = null;
   function showSettings(/** @type {boolean} */ open) {
+    if (open === !panel.hidden) {
+      return;
+    }
     panel.hidden = !open;
-    gear.setAttribute('aria-expanded', String(open));
+    if (open) {
+      focusBeforeSettings = document.activeElement;
+      /** @type {HTMLElement | null} */ (panel.querySelector('select, input'))?.focus();
+    } else if (focusBeforeSettings instanceof HTMLElement && document.contains(focusBeforeSettings)) {
+      focusBeforeSettings.focus();
+    }
   }
-  gear.addEventListener('click', () => showSettings(panel.hidden));
   document.addEventListener('click', (e) => {
-    const t = /** @type {Node} */ (e.target);
-    if (!panel.hidden && !panel.contains(t) && !gear.contains(t)) {
+    const t = /** @type {Element} */ (e.target);
+    // Le bouton qui ouvre le panneau le bascule lui-même : il ne compte pas comme un clic à côté.
+    if (!panel.hidden && !panel.contains(t) && !t.closest?.('[data-settings-toggle]')) {
       showSettings(false);
     }
   });
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && !panel.hidden) {
       showSettings(false);
-      gear.focus();
     }
   });
 
@@ -2411,7 +2415,7 @@
       lines.push(`${helpers.length} subagent(s) at work as mini-bots: ${names}.${waiting}`);
     }
     if (sessionScope) {
-      lines.push(`Showing Claude Code sessions from ${folderLabel(sessionScope)} only (⚙ to show all projects).`);
+      lines.push(`Showing Claude Code sessions from ${folderLabel(sessionScope)} only (⚙ Office settings to show all projects).`);
     }
     for (const h of snapshot.health) {
       if (h.message) {
@@ -2446,6 +2450,8 @@
       renderText(msg.summary);
     } else if (msg && msg.type === 'motion') {
       reduceMotionSetting = msg.reduceMotion;
+    } else if (msg && msg.type === 'toggleSettings') {
+      showSettings(panel.hidden);
     }
   });
 

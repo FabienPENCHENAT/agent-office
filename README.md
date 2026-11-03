@@ -25,7 +25,7 @@ A tiny pixel-art office that lives in a VS Code panel, or in its own desktop win
 - **Real delegations**: visits, meetings and hand-ins are triggered by what your agents actually do.
 - **Zero setup**: agents, desks and colors are detected automatically.
 - **Only this project's sessions**: the office comes alive for the Claude Code sessions started in the open folder, not those of your other projects. Your own agents (`~/.claude/agents`) are always at their desks.
-- **Settings at hand**: the ⚙ in the top-right corner of the office changes the main settings in a click, in VS Code and in the desktop app.
+- **Settings at hand**: the ⚙ button (in the view's title bar in VS Code, at the right of the folder bar in the desktop app) changes the main settings in a click.
 - **Seasonal decorations**: for now, winter from December 1 to January 6, with snow outside the windows and on the lounge, garlands in the corridors, a Christmas tree, presents and Santa hats.
 - **Claude itself has a desk**: when you talk to Claude Code without a custom agent, a **Claude** character works, delegates to your agents, and shows the model it's using (e.g. Opus 5.5). No custom agent needed to see the office come alive.
 - **Mini-bots for the other subagents**: built-in subagents (Explore, Plan, general-purpose…) and extra copies of an agent already at work roll in as small tracked robots and take a free desk.
@@ -224,7 +224,7 @@ Above each character, a bubble tells you what's going on:
 
 ## Settings
 
-Everything works out of the box. To change the main settings, click the **⚙** in the top-right corner of the office, in VS Code or in the desktop app. Changes apply right away:
+Everything works out of the box. To change the main settings, click the **⚙** in the Agent Office view's title bar in VS Code (or run *Agent Office: Office settings*), or at the right of the folder bar in the desktop app. Changes apply right away:
 
 | In the ⚙ panel | Choices | What it does |
 |---|---|---|
