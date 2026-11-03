@@ -1,0 +1,112 @@
+/* Application Electron : fournit les variables de thème que VS Code injecte dans ses Webviews. */
+:root {
+  --vscode-font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --vscode-font-size: 13px;
+  --vscode-foreground: #cccccc;
+  --vscode-descriptionForeground: #9d9d9d;
+  --vscode-panel-background: #1e1e1e;
+  --vscode-editor-background: #1e1e1e;
+  --vscode-editorWidget-background: #252526;
+  --vscode-editorWidget-foreground: #cccccc;
+  --vscode-textLink-foreground: #4daafc;
+  --vscode-textLink-activeForeground: #4daafc;
+  --vscode-focusBorder: #007fd4;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --vscode-foreground: #3b3b3b;
+    --vscode-descriptionForeground: #717171;
+    --vscode-panel-background: #ffffff;
+    --vscode-editor-background: #ffffff;
+    --vscode-editorWidget-background: #f3f3f3;
+    --vscode-editorWidget-foreground: #3b3b3b;
+    --vscode-textLink-foreground: #006ab1;
+    --vscode-textLink-activeForeground: #006ab1;
+  }
+}
+
+/* Barre du répertoire de travail. */
+.folderbar {
+  position: relative;
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.fb-menu { position: relative; }
+.fb-summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 320px;
+  padding: 3px 8px;
+  border: 1px solid var(--fb-border);
+  border-radius: 4px;
+  background: var(--vscode-editorWidget-background);
+  cursor: pointer;
+  list-style: none;
+}
+.fb-summary::-webkit-details-marker { display: none; }
+.fb-summary:focus-visible, .fb-btn:focus-visible, .fb-pick:focus-visible, .fb-icon:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: 1px;
+}
+.fb-label { color: var(--vscode-descriptionForeground); }
+.fb-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fb-caret { color: var(--vscode-descriptionForeground); }
+.fb-btn, .fb-icon, .fb-pick {
+  font: inherit;
+  color: var(--vscode-foreground);
+  background: transparent;
+  cursor: pointer;
+}
+.fb-btn { padding: 3px 8px; border: 1px solid var(--fb-border); border-radius: 4px; }
+.fb-btn:hover, .fb-icon:hover, .fb-pick:hover { background: var(--fb-hover); }
+.fb-hint { color: var(--vscode-descriptionForeground); font-size: 0.9em; }
+.fb-hint[hidden] { display: none; }
+.fb-list {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 10;
+  min-width: 320px;
+  max-width: min(520px, 90vw);
+  max-height: 60vh;
+  margin: 0;
+  padding: 4px;
+  overflow-y: auto;
+  list-style: none;
+  border: 1px solid var(--fb-border);
+  border-radius: 6px;
+  background: var(--vscode-editorWidget-background);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+}
+.fb-item { display: flex; align-items: center; gap: 2px; border-radius: 4px; }
+.fb-item.is-current { background: var(--fb-hover); }
+.fb-pick {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  padding: 4px 8px;
+  text-align: left;
+  border: 0;
+  border-radius: 4px;
+}
+.fb-pick-name { font-weight: 600; }
+.fb-pick-path {
+  overflow: hidden;
+  font-size: 0.85em;
+  color: var(--vscode-descriptionForeground);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+  text-align: left;
+}
+.fb-icon { width: 26px; height: 26px; border: 0; border-radius: 4px; }
+.fb-empty { padding: 6px 8px; color: var(--vscode-descriptionForeground); }
+
+:root { --fb-border: rgba(128, 128, 128, 0.45); --fb-hover: rgba(128, 128, 128, 0.2); }

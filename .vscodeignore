@@ -6,3 +6,7 @@ tsconfig.json
 .vscode/**
 tsconfig.webview.json
 docs/**
+dist/**
+media/standalone.*
+.github/**
+build/**

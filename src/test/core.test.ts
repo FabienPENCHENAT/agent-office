@@ -4,6 +4,8 @@ import * as os from 'os';
 import * as path from 'path';
 import { test } from 'node:test';
 import { DEFAULT_AGENT, definitionSources, discoverDefinitions, parseFrontmatter, withDefaultAgent } from '../discovery/agentDefinitions';
+import { resolveSettings } from '../core/settings';
+import { addProjectFolder, dropRecent, MAX_RECENTS, projectFolders, pushRecent, readSettingsFile, readState, writeState } from '../standalone/store';
 import { ClaudeCodeAdapter, modelLabel, projectDirName } from '../runtime/claudeCode';
 import { readCopilot } from '../runtime/copilot';
 import { normalize } from '../state/normalize';
@@ -373,4 +375,57 @@ test('résumé : un, plusieurs, aucun, inconnu, source indisponible', () => {
   assert.equal(down.kind, 'unknown');
   const empty = summarize(buildSnapshot([], [okClaude()], NOW));
   assert.equal(empty.text, 'No agents found');
+});
+
+test('resolveSettings: defaults, bounds and invalid values', () => {
+  const home = '/home/me';
+  const d = resolveSettings({}, {}, home);
+  assert.equal(d.claudeDir, path.join(home, '.claude'));
+  assert.equal(d.pollMs, 2000);
+  assert.equal(d.silenceMs, 20 * 60_000);
+  assert.equal(d.showClaude, true);
+  assert.equal(d.christmas, 'auto');
+  assert.equal(resolveSettings({}, { CLAUDE_CONFIG_DIR: '/env' }, home).claudeDir, '/env');
+  assert.equal(resolveSettings({ claudeConfigDir: ' /set ' }, { CLAUDE_CONFIG_DIR: '/env' }, home).claudeDir, '/set');
+  assert.equal(resolveSettings({ pollIntervalSeconds: 0 }, {}, home).pollMs, 1000);
+  assert.equal(resolveSettings({ pollIntervalSeconds: 999 }, {}, home).pollMs, 60_000);
+  const bad = resolveSettings({ pollIntervalSeconds: 'x', pinnedAgents: ['a', 3], agentRooms: { a: 'design', b: 1 }, christmasDecor: 'maybe' }, {}, home);
+  assert.equal(bad.pollMs, 2000);
+  assert.deepEqual(bad.pinned, ['a']);
+  assert.deepEqual(bad.rooms, { a: 'design' });
+  assert.equal(bad.christmas, 'auto');
+});
+
+test('standalone settings file: missing, invalid, and adding a project folder', () => {
+  const dir = tmp();
+  const file = path.join(dir, 'sub', 'settings.json');
+  assert.deepEqual(readSettingsFile(file), {});
+  addProjectFolder(file, '/work/a');
+  addProjectFolder(file, '/work/a');
+  addProjectFolder(file, '/work/b');
+  assert.deepEqual(projectFolders(readSettingsFile(file)), ['/work/a', '/work/b']);
+  fs.writeFileSync(file, '{ not json');
+  assert.deepEqual(readSettingsFile(file), {});
+  fs.writeFileSync(file, '[1]');
+  assert.deepEqual(readSettingsFile(file), {});
+});
+
+test('standalone recents: most recent first, no duplicates, bounded, removable, persisted', () => {
+  let state = readState(path.join(tmp(), 'missing.json'));
+  assert.deepEqual(state, { recents: [] });
+  state = pushRecent(pushRecent(pushRecent(state, '/work/a'), '/work/b'), '/work/a');
+  assert.deepEqual(state.recents, [path.resolve('/work/a'), path.resolve('/work/b')]);
+  assert.equal(state.lastFolder, path.resolve('/work/a'));
+  for (let i = 0; i < MAX_RECENTS + 5; i++) {
+    state = pushRecent(state, `/work/p${i}`);
+  }
+  assert.equal(state.recents.length, MAX_RECENTS);
+  state = dropRecent(state, path.resolve(`/work/p${MAX_RECENTS + 4}`));
+  assert.equal(state.recents[0], path.resolve(`/work/p${MAX_RECENTS + 3}`));
+  assert.equal(state.lastFolder, state.recents[0]);
+  const file = path.join(tmp(), 'sub', 'state.json');
+  writeState(file, state);
+  assert.deepEqual(readState(file), state);
+  fs.writeFileSync(file, '{ nope');
+  assert.deepEqual(readState(file), { recents: [] });
 });

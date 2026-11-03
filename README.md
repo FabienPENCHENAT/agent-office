@@ -17,7 +17,7 @@
 
 </div>
 
-A tiny pixel-art office inside VS Code. When one of your Claude Code agents starts working, its character walks to its desk. When an agent delegates, the others gather in a meeting room. When a job is done, the result is brought back to whoever asked for it. And when there's nothing to do, everyone heads to the pond or the hammock.
+A tiny pixel-art office that lives in a VS Code panel, or in its own desktop window when you don't use VS Code. When one of your Claude Code agents starts working, its character walks to its desk. When an agent delegates, the others gather in a meeting room. When a job is done, the result is brought back to whoever asked for it. And when there's nothing to do, everyone heads to the pond or the hammock.
 
 ## Features
 
@@ -131,7 +131,9 @@ working with the team.
 
 </details>
 
-### 2. Install the extension
+### 2. Install
+
+#### In VS Code
 
 1. Download **`agent-office-x.y.z.vsix`** from the [latest release](../../releases/latest) (under *Assets*).
 2. In VS Code, open the **Extensions** view, click the **`···`** menu at the top, choose **Install from VSIX…** and pick the file.
@@ -146,6 +148,34 @@ code --install-extension ~/Downloads/agent-office-*.vsix
 
 </details>
 
+#### Without VS Code
+
+The office also runs as a standalone desktop app (built with [Electron](https://www.electronjs.org/)). It opens in its own **window**, reads the same local files as the extension, and works next to any terminal or editor. The window title and, on macOS, the Dock badge show whether an agent is working.
+
+<img src="docs/images/desktop.png" alt="The office in its own desktop window" width="640">
+
+**Choose a working folder.** Your own agents (`~/.claude/agents`) always show up, but a project's agents (its `.claude/agents` folder) only appear once you pick that project, like opening a folder in VS Code. Use the **Folder** bar at the top of the window (or **File → Open Folder…**, `Cmd/Ctrl+O`):
+
+- Each window has its own folder. **New Window…** (`Cmd/Ctrl+N`, or ⧉ next to a recent folder) opens another folder side by side.
+- Visited folders are remembered. Click one in the **Folder** list to switch to it, or use **File → Open Recent** (`Cmd/Ctrl+1…9`). **✕** or **File → Remove from Recent List** forgets a folder (it is never deleted from disk), **Clear Recent List** forgets them all.
+- The last folder is reopened at the next launch, and the window title shows the folder and the working agent.
+
+From a clone (Node.js 18 or later):
+
+```bash
+npm install
+npm run app            # compile and open the window
+npm run app:dist       # build an installer for this OS into dist/
+```
+
+`npm run app:dist:mac` produces a `.dmg` and a `.zip`; `npm run app:dist:win` produces an installer and a portable `.exe`. Installers are not code-signed: macOS asks you to confirm the first launch (right-click → Open), and Windows SmartScreen shows a warning.
+
+| System | Status |
+|---|---|
+| macOS (Apple Silicon) | Tested, from source and as a packaged app |
+| Windows | Built by the CI workflow (`.github/workflows/app.yml`), not tested yet |
+| Linux | Not supported yet |
+
 ### 3. Put your agents to work
 
 Start Claude Code with one of your agents, for example:
@@ -154,7 +184,7 @@ Start Claude Code with one of your agents, for example:
 claude --agent product-manager
 ```
 
-Ask it for something. As soon as it starts, its character walks to its desk with a 💻 bubble, and the status bar at the bottom of VS Code reads *“Active agent: product-manager”*.
+Ask it for something. As soon as it starts, its character walks to its desk with a 💻 bubble, and the status bar at the bottom of VS Code (or the title of the desktop window) reads *“Active agent: product-manager”*.
 
 > [!TIP]
 > Talking to Claude directly, without `--agent`, doesn't light up any desk for Claude itself. Only the custom agents it launches as subagents show up.
@@ -189,7 +219,9 @@ Above each character, a bubble tells you what's going on:
 
 ## Settings
 
-Everything works out of the box. To customize, open VS Code Settings and search for **Agent Office**.
+Everything works out of the box. To customize in VS Code, open Settings and search for **Agent Office**.
+
+In the desktop app, the same options live in a `settings.json` file (menu **File → Open Settings File**), with the keys below minus the `agentOffice.` prefix, e.g. `{ "pollIntervalSeconds": 5 }`. Changes apply live. The optional `projectFolders` list names folders whose `.claude/agents` are always read, in every window.
 
 | Setting | Default | What it does |
 |---|---|---|
