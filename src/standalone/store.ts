@@ -43,17 +43,6 @@ export function projectFolders(settings: StandaloneFile): string[] {
     : [];
 }
 
-/** Ajoute un dossier de projet sans toucher aux autres clés du fichier. */
-export function addProjectFolder(file: string, dir: string): void {
-  const settings = readSettingsFile(file);
-  const folders = projectFolders(settings);
-  if (!folders.includes(dir)) {
-    folders.push(dir);
-  }
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, `${JSON.stringify({ ...SETTINGS_TEMPLATE, ...settings, projectFolders: folders }, null, 2)}\n`);
-}
-
 /** État de l'application (hors réglages) : répertoires de travail récents et dernier répertoire ouvert. */
 export interface AppState {
   /** Du plus récent au plus ancien. */

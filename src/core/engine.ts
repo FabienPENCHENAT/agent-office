@@ -30,6 +30,8 @@ export class OfficeEngine {
   private files = new Map<string, string>();
   private timer?: NodeJS.Timeout;
   private running = false;
+  /** Relevé demandé pendant qu'un autre était en cours (dossier changé, par exemple) : refait juste après. */
+  private again = false;
   private adapter: ClaudeCodeAdapter;
   private adapterKey = '';
 
@@ -78,9 +80,11 @@ export class OfficeEngine {
 
   async tick(): Promise<void> {
     if (this.running) {
+      this.again = true;
       return;
     }
     this.running = true;
+    this.again = false;
     try {
       const c = this.host.settings();
       const discovery = await discoverDefinitions(definitionSources(c.claudeDir, os.homedir(), this.host.projectDirs()));
@@ -103,6 +107,9 @@ export class OfficeEngine {
       this.host.onUpdate(this.last);
     } finally {
       this.running = false;
+    }
+    if (this.again) {
+      await this.tick();
     }
   }
 }

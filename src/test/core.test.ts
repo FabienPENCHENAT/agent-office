@@ -5,7 +5,7 @@ import * as path from 'path';
 import { test } from 'node:test';
 import { DEFAULT_AGENT, definitionSources, discoverDefinitions, parseFrontmatter, withDefaultAgent } from '../discovery/agentDefinitions';
 import { resolveSettings } from '../core/settings';
-import { addProjectFolder, dropRecent, MAX_RECENTS, projectFolders, pushRecent, readSettingsFile, readState, writeState } from '../standalone/store';
+import { dropRecent, MAX_RECENTS, projectFolders, pushRecent, readSettingsFile, readState, writeState } from '../standalone/store';
 import { ClaudeCodeAdapter, modelLabel, projectDirName } from '../runtime/claudeCode';
 import { readCopilot } from '../runtime/copilot';
 import { normalize } from '../state/normalize';
@@ -396,14 +396,13 @@ test('resolveSettings: defaults, bounds and invalid values', () => {
   assert.equal(bad.christmas, 'auto');
 });
 
-test('standalone settings file: missing, invalid, and adding a project folder', () => {
+test('standalone settings file: missing, invalid, and project folders', () => {
   const dir = tmp();
-  const file = path.join(dir, 'sub', 'settings.json');
+  const file = path.join(dir, 'settings.json');
   assert.deepEqual(readSettingsFile(file), {});
-  addProjectFolder(file, '/work/a');
-  addProjectFolder(file, '/work/a');
-  addProjectFolder(file, '/work/b');
+  fs.writeFileSync(file, JSON.stringify({ projectFolders: ['/work/a', '', 3, '/work/b'] }));
   assert.deepEqual(projectFolders(readSettingsFile(file)), ['/work/a', '/work/b']);
+  assert.deepEqual(projectFolders({ projectFolders: 'nope' }), []);
   fs.writeFileSync(file, '{ not json');
   assert.deepEqual(readSettingsFile(file), {});
   fs.writeFileSync(file, '[1]');

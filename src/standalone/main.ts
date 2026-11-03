@@ -13,6 +13,7 @@ import {
   pushRecent,
   readSettingsFile,
   readState,
+  StandaloneFile,
   writeState,
 } from './store';
 
@@ -34,6 +35,8 @@ let settingsFile = '';
 let stateFile = '';
 let state: AppState = { recents: [] };
 let watcher: fs.FSWatcher | undefined;
+/** Contenu du fichier de réglages, relu seulement quand il change (voir watchSettings). */
+let fileSettings: StandaloneFile = {};
 
 function send(o: OfficeWindow, msg: unknown): void {
   if (!o.win.isDestroyed()) {
@@ -56,6 +59,11 @@ function render(o: OfficeWindow, update: OfficeUpdate | undefined = o.engine.las
   }
   send(o, { type: 'snapshot', ...update });
   updateTitle(o);
+  updateBadge();
+}
+
+/** Badge du Dock (macOS) : allumé tant qu'un agent travaille dans l'une des fenêtres ouvertes. */
+function updateBadge(): void {
   if (isMac) {
     const working = [...offices.values()].some((w) => w.engine.last?.summary.kind === 'active');
     app.dock?.setBadge(working ? '●' : '');
@@ -187,9 +195,9 @@ function createWindow(): OfficeWindow {
   const o: OfficeWindow = {
     win,
     engine: new OfficeEngine({
-      settings: () => resolveSettings(readSettingsFile(settingsFile)),
+      settings: () => resolveSettings(fileSettings),
       // Le répertoire de la fenêtre, puis les dossiers toujours lus (`projectFolders` du fichier de réglages).
-      projectDirs: () => [...new Set([...(o.folder ? [o.folder] : []), ...projectFolders(readSettingsFile(settingsFile))])],
+      projectDirs: () => [...new Set([...(o.folder ? [o.folder] : []), ...projectFolders(fileSettings)])],
       onUpdate: (update) => render(o, update),
     }),
   };
@@ -202,6 +210,7 @@ function createWindow(): OfficeWindow {
   win.on('closed', () => {
     o.engine.stop();
     offices.delete(id);
+    updateBadge();
   });
   void win.loadURL(`${SCHEME}://app/`);
   o.engine.start();
@@ -272,12 +281,16 @@ function buildMenu(): void {
 
 function watchSettings(): void {
   ensureSettingsFile(settingsFile);
+  fileSettings = readSettingsFile(settingsFile);
   let timer: NodeJS.Timeout | undefined;
   // On surveille le dossier (les éditeurs remplacent souvent le fichier) et on regroupe les rafales d'événements.
   watcher = fs.watch(path.dirname(settingsFile), (_event, name) => {
     if (name === path.basename(settingsFile)) {
       clearTimeout(timer);
-      timer = setTimeout(() => offices.forEach((o) => o.engine.onSettingsChanged()), 300);
+      timer = setTimeout(() => {
+        fileSettings = readSettingsFile(settingsFile);
+        offices.forEach((o) => o.engine.onSettingsChanged());
+      }, 300);
     }
   });
 }
@@ -363,8 +376,11 @@ if (!app.requestSingleInstanceLock()) {
     });
   });
 
+  // Sur macOS, l'application reste ouverte sans fenêtre (clic sur l'icône du Dock : voir `activate`).
   app.on('window-all-closed', () => {
-    watcher?.close();
-    app.quit();
+    if (!isMac) {
+      app.quit();
+    }
   });
+  app.on('will-quit', () => watcher?.close());
 }
