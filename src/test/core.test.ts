@@ -4,12 +4,12 @@ import * as os from 'os';
 import * as path from 'path';
 import { test } from 'node:test';
 import { DEFAULT_AGENT, definitionSources, discoverDefinitions, parseFrontmatter, withDefaultAgent } from '../discovery/agentDefinitions';
-import { resolveSettings } from '../core/settings';
-import { dropRecent, MAX_RECENTS, projectFolders, pushRecent, readSettingsFile, readState, writeState } from '../standalone/store';
-import { ClaudeCodeAdapter, modelLabel, projectDirName } from '../runtime/claudeCode';
+import { panelSetting, resolveSettings } from '../core/settings';
+import { dropRecent, MAX_RECENTS, projectFolders, pushRecent, readSettingsFile, readState, writeSetting, writeState } from '../standalone/store';
+import { ClaudeCodeAdapter, cwdMatcher, modelLabel, projectDirName } from '../runtime/claudeCode';
 import { readCopilot } from '../runtime/copilot';
 import { normalize } from '../state/normalize';
-import { christmasDecor } from '../state/season';
+import { winterDecor } from '../state/season';
 import { roleOf } from '../state/placement';
 import { assignSlots } from '../state/slots';
 import { buildSnapshot } from '../state/snapshot';
@@ -94,6 +94,9 @@ test('Claude Code : session vivante occupée avec agent principal → actif ; mo
   assert.equal(report.health.status, 'ok');
   const states = Object.fromEntries(report.signals.map((s) => [s.agentName, s.state]));
   assert.deepEqual(states, { 'product-manager': 'active', 'tech-lead': 'idle' });
+  // Limité aux dossiers d'un projet : les sessions lancées ailleurs ne sont pas lues.
+  assert.equal((await adapter.read(['/Users/x/projet'])).signals.length, 2);
+  assert.equal((await adapter.read(['/Users/x/autre'])).signals.length, 0);
 });
 
 test('Claude Code : sous-agents non terminés actifs, terminés ignorés, silencieux inconnus', async () => {
@@ -341,15 +344,14 @@ test('délégations : lancement et fin réels, transmises seulement entre agents
   assert.equal(pm?.agent?.state, 'inactive');
 });
 
-test('décor de Noël : du 1er décembre au 6 janvier en auto, forcé sinon', () => {
-  const on = (iso: string) => christmasDecor('auto', new Date(`${iso}T12:00:00`));
+test('décor de saison : l\'hiver du 1er décembre au 6 janvier, jamais s\'il est coupé', () => {
+  const on = (iso: string) => winterDecor(true, new Date(`${iso}T12:00:00`));
   assert.equal(on('2026-11-30'), false);
   assert.equal(on('2026-12-01'), true);
   assert.equal(on('2026-12-31'), true);
   assert.equal(on('2027-01-06'), true);
   assert.equal(on('2027-01-07'), false);
-  assert.equal(christmasDecor('on', new Date('2026-07-14T12:00:00')), true);
-  assert.equal(christmasDecor('off', new Date('2026-12-25T12:00:00')), false);
+  assert.equal(winterDecor(false, new Date('2026-12-25T12:00:00')), false);
 });
 
 test('résumé : un, plusieurs, aucun, inconnu, source indisponible', () => {
@@ -384,7 +386,11 @@ test('resolveSettings: defaults, bounds and invalid values', () => {
   assert.equal(d.pollMs, 2000);
   assert.equal(d.silenceMs, 20 * 60_000);
   assert.equal(d.showClaude, true);
-  assert.equal(d.christmas, 'auto');
+  assert.equal(d.seasonal, true);
+  assert.equal(d.sessionScope, 'project');
+  assert.equal(resolveSettings({ christmasDecor: 'off' }, {}, home).seasonal, false);
+  assert.equal(resolveSettings({ christmasDecor: 'off', seasonalDecor: true }, {}, home).seasonal, true);
+  assert.equal(resolveSettings({ sessionScope: 'all' }, {}, home).sessionScope, 'all');
   assert.equal(resolveSettings({}, { CLAUDE_CONFIG_DIR: '/env' }, home).claudeDir, '/env');
   assert.equal(resolveSettings({ claudeConfigDir: ' /set ' }, { CLAUDE_CONFIG_DIR: '/env' }, home).claudeDir, '/set');
   assert.equal(resolveSettings({ pollIntervalSeconds: 0 }, {}, home).pollMs, 1000);
@@ -393,7 +399,29 @@ test('resolveSettings: defaults, bounds and invalid values', () => {
   assert.equal(bad.pollMs, 2000);
   assert.deepEqual(bad.pinned, ['a']);
   assert.deepEqual(bad.rooms, { a: 'design' });
-  assert.equal(bad.christmas, 'auto');
+  assert.equal(bad.seasonal, true);
+});
+
+test('roue crantée : seules ses clés et leurs valeurs prévues sont acceptées', () => {
+  assert.deepEqual(panelSetting('sessionScope', 'all'), { key: 'sessionScope', value: 'all' });
+  assert.deepEqual(panelSetting('subagentSilenceMinutes', 5), { key: 'subagentSilenceMinutes', value: 5 });
+  assert.deepEqual(panelSetting('seasonalDecor', false), { key: 'seasonalDecor', value: false });
+  assert.equal(panelSetting('sessionScope', 'mine'), undefined);
+  assert.equal(panelSetting('subagentSilenceMinutes', 7), undefined);
+  assert.equal(panelSetting('showDefaultClaude', 'yes'), undefined);
+  assert.equal(panelSetting('claudeConfigDir', '/tmp'), undefined);
+  assert.equal(panelSetting('__proto__', true), undefined);
+});
+
+test('portée : dossier du projet et sous-dossiers, pas les dossiers voisins', () => {
+  const inScope = cwdMatcher(['/work/app', '/work/lib'], 'darwin');
+  assert.equal(inScope('/work/app'), true);
+  assert.equal(inScope('/work/app/.claude/worktrees/x'), true);
+  assert.equal(inScope('/WORK/Lib'), true);
+  assert.equal(inScope('/work/app-2'), false);
+  assert.equal(inScope('/work'), false);
+  assert.equal(inScope(undefined), false);
+  assert.equal(cwdMatcher(['/work/app'], 'linux')('/WORK/app'), false);
 });
 
 test('standalone settings file: missing, invalid, and project folders', () => {
@@ -403,6 +431,15 @@ test('standalone settings file: missing, invalid, and project folders', () => {
   fs.writeFileSync(file, JSON.stringify({ projectFolders: ['/work/a', '', 3, '/work/b'] }));
   assert.deepEqual(projectFolders(readSettingsFile(file)), ['/work/a', '/work/b']);
   assert.deepEqual(projectFolders({ projectFolders: 'nope' }), []);
+  // Un réglage de la roue crantée garde les autres clés ; l'ancien décor coupé devient `seasonalDecor: false`.
+  fs.writeFileSync(file, JSON.stringify({ projectFolders: ['/work/a'], christmasDecor: 'off', pinnedAgents: ['pm'] }));
+  writeSetting(file, 'sessionScope', 'all');
+  const saved = readSettingsFile(file);
+  assert.equal(saved.sessionScope, 'all');
+  assert.equal(saved.seasonalDecor, false);
+  assert.equal(saved.christmasDecor, undefined);
+  assert.deepEqual(saved.pinnedAgents, ['pm']);
+  assert.deepEqual(projectFolders(saved), ['/work/a']);
   fs.writeFileSync(file, '{ not json');
   assert.deepEqual(readSettingsFile(file), {});
   fs.writeFileSync(file, '[1]');

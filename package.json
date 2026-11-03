@@ -51,8 +51,23 @@
         "command": "agentOffice.refresh",
         "title": "Refresh agent status",
         "category": "Agent Office"
+      },
+      {
+        "command": "agentOffice.settings",
+        "title": "Office settings",
+        "category": "Agent Office",
+        "icon": "$(gear)"
       }
     ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "agentOffice.settings",
+          "when": "view == agentOffice.office",
+          "group": "navigation"
+        }
+      ]
+    },
     "configuration": {
       "title": "Agent Office",
       "properties": {
@@ -87,20 +102,32 @@
           "default": true,
           "description": "Shows a \"Claude\" character for Claude Code sessions started without --agent (your conversations with Claude itself), with the model it uses."
         },
+        "agentOffice.sessionScope": {
+          "type": "string",
+          "default": "project",
+          "enum": [
+            "project",
+            "all"
+          ],
+          "enumDescriptions": [
+            "Only Claude Code sessions started in the open folders (or their subfolders)",
+            "Every Claude Code session on this machine"
+          ],
+          "description": "Which Claude Code sessions animate the office. Your own and the project's agents are always shown; with no folder open, every session is shown."
+        },
+        "agentOffice.seasonalDecor": {
+          "type": "boolean",
+          "default": true,
+          "description": "Seasonal decorations in the office, following the date. For now: winter, from December 1 to January 6 (snow outside, garlands, a Christmas tree, presents and Santa hats)."
+        },
         "agentOffice.christmasDecor": {
           "type": "string",
-          "default": "auto",
           "enum": [
             "auto",
             "on",
             "off"
           ],
-          "enumDescriptions": [
-            "From December 1 to January 6",
-            "All year round",
-            "Never"
-          ],
-          "description": "Christmas decorations in the office: snow outside, garlands, a Christmas tree, presents and Santa hats."
+          "markdownDeprecationMessage": "Replaced by `#agentOffice.seasonalDecor#`. Only `off` is still taken into account, when `seasonalDecor` isn't set."
         },
         "agentOffice.agentRooms": {
           "type": "object",

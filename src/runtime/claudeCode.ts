@@ -1,4 +1,4 @@
-import type { Stats } from 'fs';
+import { realpathSync, type Stats } from 'fs';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { ActivitySignal, Delegation, RuntimeReport, SubagentRun } from '../types';
@@ -17,7 +17,8 @@ import { ActivitySignal, Delegation, RuntimeReport, SubagentRun } from '../types
  *     Chaque sous-agent non terminé est aussi remonté comme instance (`subagents`), pour les mini-bots.
  *  4. Délégations : un sous-agent de profondeur 1 a été lancé par l'agent principal de sa session.
  *     Lancement = création du transcript du sous-agent ; fin = écriture de `finished: true`.
- *  5. Session sans agent principal : attribuée à `defaultAgent` (le personnage « Claude ») s'il est fourni,
+ *  5. Portée : avec des dossiers de projet, seules les sessions dont le `cwd` est dans l'un d'eux sont lues.
+ *  6. Session sans agent principal : attribuée à `defaultAgent` (le personnage « Claude ») s'il est fourni,
  *     avec le modèle lu dans le dernier champ `"model"` de la fin du transcript.
  *
  * Aucun contenu de conversation n'est conservé ni transmis : seuls le nom d'agent,
@@ -66,6 +67,33 @@ export function defaultIsPidAlive(pid: number): boolean {
   } catch (err) {
     return (err as NodeJS.ErrnoException).code === 'EPERM';
   }
+}
+
+/**
+ * Teste si un dossier de travail est l'un de ces dossiers ou l'un de leurs sous-dossiers. Les liens symboliques des
+ * dossiers sont résolus (Claude Code note le chemin réel), et la casse est ignorée sur macOS et Windows.
+ */
+export function cwdMatcher(dirs: string[], platform: NodeJS.Platform = process.platform): (cwd: string | undefined) => boolean {
+  const fold = platform === 'linux' ? (p: string) => p : (p: string) => p.toLowerCase();
+  const roots = new Set<string>();
+  for (const dir of dirs) {
+    roots.add(fold(path.resolve(dir)));
+    try {
+      roots.add(fold(realpathSync(dir)));
+    } catch {
+      // dossier introuvable : seul son chemin tel quel compte
+    }
+  }
+  return (cwd) => {
+    if (!cwd) {
+      return false;
+    }
+    const c = fold(path.resolve(cwd));
+    return [...roots].some((r) => {
+      const rel = path.relative(r, c);
+      return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
+    });
+  };
 }
 
 /** Convention de Claude Code pour nommer le dossier de projet à partir du cwd. */
@@ -164,7 +192,9 @@ export class ClaudeCodeAdapter {
     return (this.options.now ?? Date.now)();
   }
 
-  async read(): Promise<RuntimeReport> {
+  /** `scope` : dossiers de projet dont les sessions sont lues ; absent, toutes les sessions de la machine le sont. */
+  async read(scope?: string[]): Promise<RuntimeReport> {
+    const inScope = scope ? cwdMatcher(scope) : () => true;
     const sessionsDir = path.join(this.options.claudeDir, 'sessions');
     let files: string[];
     try {
@@ -210,6 +240,9 @@ export class ClaudeCodeAdapter {
         continue; // session expirée
       }
       liveIds.add(session.sessionId);
+      if (!inScope(session.cwd)) {
+        continue; // session d'un autre projet
+      }
       const result = await this.sessionSignals(session);
       signals.push(...result.signals);
       delegations.push(...result.delegations);

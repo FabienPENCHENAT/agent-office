@@ -24,7 +24,9 @@ A tiny pixel-art office that lives in a VS Code panel, or in its own desktop win
 - **Live status**: see which agent is working, idle or in an unknown state, refreshed every 2 seconds.
 - **Real delegations**: visits, meetings and hand-ins are triggered by what your agents actually do.
 - **Zero setup**: agents, desks and colors are detected automatically.
-- **Christmas decorations** from December 1 to January 6: snow outside the windows and on the lounge, garlands in the corridors, a Christmas tree, presents and Santa hats.
+- **Only this project's sessions**: the office comes alive for the Claude Code sessions started in the open folder, not those of your other projects. Your own agents (`~/.claude/agents`) are always at their desks.
+- **Settings at hand**: the ⚙ button (in the view's title bar in VS Code, at the right of the folder bar in the desktop app) changes the main settings in a click.
+- **Seasonal decorations**: for now, winter from December 1 to January 6, with snow outside the windows and on the lounge, garlands in the corridors, a Christmas tree, presents and Santa hats.
 - **Claude itself has a desk**: when you talk to Claude Code without a custom agent, a **Claude** character works, delegates to your agents, and shows the model it's using (e.g. Opus 5.5). No custom agent needed to see the office come alive.
 - **Mini-bots for the other subagents**: built-in subagents (Explore, Plan, general-purpose…) and extra copies of an agent already at work roll in as small tracked robots and take a free desk.
 - **Edit an agent in one click**: click a character, it turns to face you, and **Edit agent file** opens its `.md` in the editor. Restart Claude Code to apply your changes.
@@ -207,7 +209,7 @@ Everything is automatic. The extension:
    | anything else | Engineering open space |
 
 3. **gives each one a color**: the `color:` from the agent's file, or else one no other agent is using;
-4. **reads Claude Code's local activity files** every 2 seconds to know who's working and who delegates to whom.
+4. **reads Claude Code's local activity files** every 2 seconds to know who's working and who delegates to whom, only for the sessions started in the open folder (or one of its subfolders) unless you choose **All projects**.
 
 Above each character, a bubble tells you what's going on:
 
@@ -222,24 +224,35 @@ Above each character, a bubble tells you what's going on:
 
 ## Settings
 
-Everything works out of the box. To customize in VS Code, open Settings and search for **Agent Office**.
+Everything works out of the box. To change the main settings, click the **⚙** in the Agent Office view's title bar in VS Code (or run *Agent Office: Office settings*), or at the right of the folder bar in the desktop app. Changes apply right away:
 
-In the desktop app, the same options live in a `settings.json` file (menu **File → Open Settings File**), with the keys below minus the `agentOffice.` prefix, e.g. `{ "pollIntervalSeconds": 5 }`. Changes apply live. The optional `projectFolders` list names folders whose `.claude/agents` are always read, in every window.
+| In the ⚙ panel | Choices | What it does |
+|---|---|---|
+| **Sessions shown** | This project (default) / All projects | *This project*: only the Claude Code sessions started in the open folder or its subfolders animate the office. Your own agents (`~/.claude/agents`) and the project's agents are always shown, but an agent working in another project stays idle here. With no folder open, every session is shown. |
+| **Show Claude** | On (default) / Off | The **Claude** character for sessions started without a custom agent |
+| **Grey after** | 5, 10, 20 (default) or 60 min | How long a subagent can stay silent before it turns grey with a “?” |
+| **Seasonal decor** | On (default) / Off | *On*: the office follows the seasons (for now, winter from December 1 to January 6). *Off*: never decorated. |
+
+The ⚙ panel saves to your regular settings: in VS Code, your user settings (or the workspace settings if the value is already set there).
+
+For the other settings, open Settings in VS Code and search for **Agent Office**. In the desktop app, the same options live in a `settings.json` file (menu **File → Open Settings File**), with the keys below minus the `agentOffice.` prefix, e.g. `{ "pollIntervalSeconds": 5 }`. Changes apply live. The optional `projectFolders` list names folders whose `.claude/agents` are always read, in every window.
 
 | Setting | Default | What it does |
 |---|---|---|
 | `agentOffice.agentRooms` | `{}` | Force an agent's desk, e.g. `{ "my-agent": "design" }` (`pm`, `challenger`, `design` or `engineering`) |
 | `agentOffice.pinnedAgents` | `[]` | Agents shown first when you have more than 10 |
-| `agentOffice.christmasDecor` | `auto` | Christmas decorations: `auto` (December 1 to January 6), `on` or `off` |
+| `agentOffice.sessionScope` | `project` | `project`: only the sessions started in the open folders; `all`: every session on this machine |
 | `agentOffice.showDefaultClaude` | `true` | Show the **Claude** character for sessions started without a custom agent |
+| `agentOffice.subagentSilenceMinutes` | `20` | Minutes of silence before a subagent turns grey with a “?” |
+| `agentOffice.seasonalDecor` | `true` | Seasonal decorations, following the date (for now, winter) |
 | `agentOffice.pollIntervalSeconds` | `2` | Refresh interval, in seconds |
 
-Two more advanced settings are described in the [technical docs](docs/TECHNICAL.md#signal-sources-claude-code).
+`agentOffice.claudeConfigDir` is described in the [technical docs](docs/TECHNICAL.md#signal-sources-claude-code).
 
 ## Privacy
 
 - **100% local**: the extension makes no network request.
-- **Read-only**: it never changes a file and never starts or controls an agent.
+- **Read-only**: it never changes a Claude Code or agent file and never starts or controls an agent. The only thing it writes is its own settings, when you use the ⚙ panel.
 - **Nothing of your work is shown**: only agent names, statuses, the Claude model name and timestamps reach the office view.
 
 ## Known limitations
@@ -248,6 +261,7 @@ Two more advanced settings are described in the [technical docs](docs/TECHNICAL.
 - **Relies on Claude Code internals.** Activity is read from local files that Claude Code doesn't officially document. A Claude Code update may break detection; the office then shows “Unknown status” rather than guessing.
 - **Tested on macOS.** Linux and Windows should work but haven't been tested yet: feedback welcome.
 - **10 agents max** in the office. Extra agents are listed below it.
+- **Sessions outside the project folder** (started from your home folder, or from a worktree outside the project) are hidden with **This project**. Switch to **All projects** to see them.
 
 More details in the [technical docs](docs/TECHNICAL.md#limits).
 

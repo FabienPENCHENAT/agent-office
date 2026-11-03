@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { pathToFileURL } from 'url';
 import { OfficeEngine, OfficeUpdate } from '../core/engine';
-import { resolveSettings } from '../core/settings';
+import { panelSetting, resolveSettings } from '../core/settings';
 import { officePage } from '../view/officePage';
 import {
   AppState,
@@ -13,6 +13,7 @@ import {
   pushRecent,
   readSettingsFile,
   readState,
+  writeSetting,
   StandaloneFile,
   writeState,
 } from './store';
@@ -299,6 +300,8 @@ interface PageMessage {
   type?: string;
   id?: unknown;
   path?: unknown;
+  key?: unknown;
+  value?: unknown;
 }
 
 function onMessage(o: OfficeWindow, msg: PageMessage | undefined): void {
@@ -330,6 +333,14 @@ function onMessage(o: OfficeWindow, msg: PageMessage | undefined): void {
         saveState(dropRecent(state, known));
       }
       break;
+    case 'setSetting': {
+      // Le fichier est surveillé : toutes les fenêtres relisent les réglages une fois qu'il est écrit.
+      const setting = panelSetting(msg.key, msg.value);
+      if (setting) {
+        writeSetting(settingsFile, setting.key, setting.value);
+      }
+      break;
+    }
   }
 }
 

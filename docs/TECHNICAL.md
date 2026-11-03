@@ -36,9 +36,11 @@ Bubbles are always drawn on top of everything else. A character sitting on the s
 
 Delegation scenes (visit, meeting, hand-in) are triggered **only** by an observed subagent launch or finish. Their duration and staging are illustrative. A scene only plays for a recent delegation (less than 90 seconds old): when the panel opens, old delegations are not replayed.
 
-## Christmas decorations
+## Seasonal decorations
 
-From December 1 to January 6 (local date), the office is decorated. The `agentOffice.christmasDecor` setting can force them all year (`on`) or turn them off (`off`); the default is `auto`. The extension checks the date at every refresh, so the decorations appear and disappear on their own.
+With `agentOffice.seasonalDecor` on (the default), the office follows the seasons. Winter is the only season so far: from December 1 to January 6 (local date). Off, the office is never decorated. The extension checks the date at every refresh, so the decorations appear and disappear on their own.
+
+The former `agentOffice.christmasDecor` setting is deprecated: when `seasonalDecor` isn't set, `christmasDecor: "off"` still turns the decorations off (the desktop app rewrites it as `seasonalDecor: false` the next time it saves its settings file). Its old `on` value, which forced the decorations all year, is gone.
 
 - **Outside**: snow falls behind the windows, which also get a holly wreath. The lounge is under snow: frozen pond, snow-capped fir trees and bushes, a snowman, falling snowflakes. The wildflowers are hidden.
 - **Indoors**: string lights on the corridor-side walls (not on the façade of the top rooms), a decorated Christmas tree with presents in place of the open-space plant at the lounge side, a pile of presents along the right wall of the large meeting room, and a Santa hat on every character.
@@ -69,6 +71,7 @@ All of these are read-only, and the extension never starts a process.
 1. **Session registry** `~/.claude/sessions/<pid>.json`, maintained by Claude Code: `pid`, `sessionId`, `cwd`, `status` (`busy` / `idle`).
    - A session is alive if its process still exists (`process.kill(pid, 0)`, which only checks that it exists).
    - A session whose process is gone is expired and ignored.
+   - **Scope** (`agentOffice.sessionScope`, `project` by default): only the sessions whose `cwd` is one of the project folders or inside one are read. The project folders are the folders open in the VS Code window, or the desktop window's working folder plus `projectFolders`. Folder symlinks are resolved, and the comparison ignores case on macOS and Windows. A session without `cwd` is skipped. With no project folder, or with `all`, every session is read. Agent definitions are not affected: `~/.claude/agents` and the project's `.claude/agents` are always shown.
 2. **Main agent** of a session (for example `claude --agent product-manager`): the `agent` field of the registry, otherwise the `{"type":"agent-setting","agentSetting":"<name>"}` entry in the first 64 KB of the transcript.
    - A session with neither is a conversation with Claude itself: it is attributed to the **Claude** character, and its model is the last `"model":"claude-…"` field in the final 64 KB of the transcript, shown as e.g. “Opus 5.5”. The transcript is only re-read when it changes.
    - Nothing else is read from the transcript.
@@ -87,6 +90,15 @@ All of these are read-only, and the extension never starts a process.
 An agent is **working** if at least one of its instances is active. Otherwise it is **unknown** if a signal is inconclusive or the source can't be read. Otherwise it is **idle**. “No active agents” is only shown when every agent on display is confirmed idle.
 
 Signals are read every `agentOffice.pollIntervalSeconds` seconds (2 by default).
+
+## Settings panel (⚙)
+
+The panel opens in the top-right corner of the scene; nothing is drawn on the scene itself. The host toggles it by posting `{ type: 'toggleSettings' }`: in VS Code, the `agentOffice.settings` command (⚙ in the view's title bar, `view/title` menu); in the desktop app, the ⚙ button of the folder bar (`media/standalone.js`). Escape or a click elsewhere closes it. It holds four settings: **Sessions shown** (`sessionScope`), **Show Claude** (`showDefaultClaude`), **Grey after** (`subagentSilenceMinutes`: 5, 10, 20 or 60; a different value set elsewhere is kept and shown) and **Seasonal decor** (`seasonalDecor`). The other settings are only in Settings or the settings file.
+
+- Each snapshot carries the current values (`settings`) and the folders the sessions are filtered on (`scope`), so the panel and the footer line “Showing Claude Code sessions from … only” stay in sync with changes made elsewhere.
+- A change sends `{ type: 'setSetting', key, value }`. The host validates it with `panelSetting()` (`core/settings.ts`): only these four keys and their listed values are accepted.
+- VS Code writes it with `WorkspaceConfiguration.update`, to the workspace folder or workspace settings if the value is already defined there, otherwise to the user settings. The desktop app writes it to its `settings.json`, keeping the other keys; the file watcher then refreshes every window.
+- For 3 seconds after a change, a snapshot doesn't overwrite that control, so a refresh already in progress doesn't flip it back.
 
 ## Ten desks, rooms and colors
 
@@ -136,7 +148,7 @@ Example setting:
 - Data stays **100% local**: no network request, neither in the extension nor in the Webview.
 - The Webview uses a strict CSP: `default-src 'none'`, a single local script with a nonce, local styles and images only.
 - The Webview only receives names, statuses, desks, colors and timestamps.
-- The extension never writes to any configuration, session or agent file (it can open an agent's file in the editor; you make the edits). It doesn't start or control any agent, and can't create one.
+- The extension never writes to any Claude Code configuration, session or agent file (it can open an agent's file in the editor; you make the edits). It only writes its own settings (`agentOffice.*`, or the desktop app's `settings.json`) when you change them in the ⚙ panel, and only the four keys and values the panel offers. It doesn't start or control any agent, and can't create one.
 
 ## Limits
 
@@ -174,7 +186,7 @@ npm run app        # compile, then start Electron on out/standalone/main.js
 npm run app:dist   # electron-builder: dmg + zip (macOS), nsis + portable (Windows) in dist/
 ```
 
-The package `main` stays the VS Code extension; electron-builder overrides it with `out/standalone/main.js` (`build.extraMetadata`). The window loads `agent-office://app/` — a custom protocol serving the page and `media/` only — with a CSP that allows no network and no inline script. The renderer is the unchanged `media/office.js`: `media/standalone.js` provides `acquireVsCodeApi` on top of a `contextBridge` preload, and `media/standalone.css` supplies the `--vscode-*` theme variables (dark/light follow the system). Settings are read from `<userData>/settings.json` at startup and again whenever the file changes, so edits are picked up live. On macOS the app keeps running when its last window closes, like other Mac apps; clicking the Dock icon reopens the last folder. Each window owns one working folder and its own `OfficeEngine` (`projectDirs` = that folder + `projectFolders` from the settings); the recent folders live in `<userData>/state.json`. The page asks for folder changes over IPC (`chooseFolder`, `switchFolder`, `newWindow`, `removeRecent`), and the main process only accepts paths that are in the recent list or come from its own folder dialog.
+The package `main` stays the VS Code extension; electron-builder overrides it with `out/standalone/main.js` (`build.extraMetadata`). The window loads `agent-office://app/` — a custom protocol serving the page and `media/` only — with a CSP that allows no network and no inline script. The renderer is the unchanged `media/office.js`: `media/standalone.js` provides `acquireVsCodeApi` on top of a `contextBridge` preload, and `media/standalone.css` supplies the `--vscode-*` theme variables (dark/light follow the system). Settings are read from `<userData>/settings.json` at startup and again whenever the file changes, so edits are picked up live. On macOS the app keeps running when its last window closes, like other Mac apps; clicking the Dock icon reopens the last folder. Each window owns one working folder and its own `OfficeEngine` (`projectDirs` = that folder + `projectFolders` from the settings); the recent folders live in `<userData>/state.json`. The ⚙ panel's `setSetting` messages are written to that `settings.json` after validation. The page asks for folder changes over IPC (`chooseFolder`, `switchFolder`, `newWindow`, `removeRecent`), and the main process only accepts paths that are in the recent list or come from its own folder dialog.
 
 ## Checks
 
@@ -195,7 +207,8 @@ src/
   state/placement.ts             role (setting, name, description) → room and desk
   state/summary.ts               answer to “which agent is working?”
   state/snapshot.ts              minimal snapshot sent to the view
-  core/settings.ts               defaults and bounds for the settings (VS Code and desktop app)
+  state/season.ts                seasonal decorations by date
+  core/settings.ts               defaults and bounds for the settings, ⚙ panel keys and validation (VS Code and desktop app)
   core/engine.ts                 polling loop → snapshot, independent of VS Code
   view/officePage.ts             page markup shared by the Webview and the desktop window
   view/officeHtml.ts             Webview page + CSP

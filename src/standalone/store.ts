@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { RawSettings } from '../core/settings';
+import { PanelSettings, RawSettings } from '../core/settings';
 
 /** Fichier settings.json de l'application : mêmes clés que `agentOffice.*` dans VS Code, plus les dossiers de projet. */
 export interface StandaloneFile extends RawSettings {
@@ -14,7 +14,8 @@ export const SETTINGS_TEMPLATE = {
   subagentSilenceMinutes: 20,
   pinnedAgents: [],
   showDefaultClaude: true,
-  christmasDecor: 'auto',
+  sessionScope: 'project',
+  seasonalDecor: true,
   agentRooms: {},
   projectFolders: [],
 };
@@ -41,6 +42,23 @@ export function projectFolders(settings: StandaloneFile): string[] {
   return Array.isArray(settings.projectFolders)
     ? settings.projectFolders.filter((p): p is string => typeof p === 'string' && p.length > 0)
     : [];
+}
+
+/**
+ * Contenu à réécrire : les valeurs par défaut, puis celles du fichier. L'ancien `christmasDecor` devient
+ * `seasonalDecor`, pour qu'un décor coupé le reste.
+ */
+function merged(settings: StandaloneFile, changes: Partial<StandaloneFile>): string {
+  const { christmasDecor, ...rest } = settings;
+  const legacy = christmasDecor !== undefined && rest.seasonalDecor === undefined ? { seasonalDecor: christmasDecor !== 'off' } : {};
+  return `${JSON.stringify({ ...SETTINGS_TEMPLATE, ...rest, ...legacy, ...changes }, null, 2)}\n`;
+}
+
+/** Enregistre un réglage changé dans la roue crantée, sans toucher aux autres clés du fichier. */
+export function writeSetting<K extends keyof PanelSettings>(file: string, key: K, value: PanelSettings[K]): void {
+  const settings = readSettingsFile(file);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, merged(settings, { [key]: value }));
 }
 
 /** État de l'application (hors réglages) : répertoires de travail récents et dernier répertoire ouvert. */
