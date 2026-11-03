@@ -59,7 +59,7 @@ class OfficeController implements vscode.WebviewViewProvider, vscode.Disposable 
     if (!update) {
       return;
     }
-    const icon = { active: '$(pulse)', idle: '$(circle-outline)', unknown: '$(question)', empty: '$(circle-slash)' }[
+    const icon = { active: '$(pulse)', waiting: '$(bell-dot)', idle: '$(circle-outline)', unknown: '$(question)', empty: '$(circle-slash)' }[
       update.summary.kind
     ];
     this.statusBar.text = `${icon} ${update.summary.text}`;

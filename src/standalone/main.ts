@@ -66,8 +66,9 @@ function render(o: OfficeWindow, update: OfficeUpdate | undefined = o.engine.las
 /** Badge du Dock (macOS) : allumé tant qu'un agent travaille dans l'une des fenêtres ouvertes. */
 function updateBadge(): void {
   if (isMac) {
-    const working = [...offices.values()].some((w) => w.engine.last?.summary.kind === 'active');
-    app.dock?.setBadge(working ? '●' : '');
+    const kinds = [...offices.values()].map((w) => w.engine.last?.summary.kind);
+    // « ! » : un agent attend une réponse ; « ● » : un agent travaille.
+    app.dock?.setBadge(kinds.includes('waiting') ? '!' : kinds.includes('active') ? '●' : '');
   }
 }
 

@@ -2,6 +2,7 @@
   --po-active: #f5c542;
   --po-active-ink: #1d1a10;
   --po-unknown: #9aa4b1;
+  --po-waiting: #e08a1e;
   --po-idle: var(--vscode-descriptionForeground, #8a8a8a);
 }
 
@@ -148,6 +149,7 @@ canvas {
 .roster li.is-active { background: var(--po-active); color: var(--po-active-ink); }
 .roster li.is-active .state, .roster li.is-active .num { color: var(--po-active-ink); }
 .roster li.is-unknown .state { font-style: italic; }
+.roster li.is-waiting .state { font-weight: 600; color: var(--po-waiting); }
 .roster li.is-empty { opacity: 0.6; font-style: italic; }
 
 .footer {

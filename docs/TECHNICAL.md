@@ -30,8 +30,9 @@ The visual idea is inspired by [Pixel Agents](https://github.com/pixel-agents-hq
 | A subagent finishes | **Real**: subagent marked `finished` | It brings its work (“paper” bubble, from the moment it sets off) to the delegating agent's desk, who accepts it (“✓” bubble), then it goes back to its idle routine. |
 | A subagent has **no character of its own** | **Real**: running subagent of a built-in type (Explore, general-purpose, Plan…, forks, workflow agents) or a second instance of an agent already at work | A **mini-bot** (a small tracked robot with a screen head on a neck and a box body in a color per subagent type, with the “work” bubble while it runs) rolls in from the **doormat** at the right-hand end of the corridor. It takes a free open-space desk, first one with no assigned agent, then one whose agent is idle, and its screen lights up. If that agent gets back to work, the mini-bot gives up the desk. With no free desk, it sits on the floor in the corridor, back to the wall, the light on its body blinking. When the subagent finishes, it leaves the same way. Up to **8** mini-bots; beyond that, a “+N” sign above the doormat counts the ones waiting outside. |
 | An agent is idle | **Real** for the status; **decorative** for the activity | Free routine: hammock, bench by the pond, pond side, chat for two, stroll. |
+| An agent **waits for you** | **Real**: session `waiting` (a permission or a question), or a subagent of that session silent for 30 s | It sits at its desk, in color, with an amber “raised hand” bubble. Its card says *“Waiting for your answer in Claude Code.”* The status bar reads *“Waiting for you: …”*, and on macOS the desktop app's Dock badge shows “!”. A mini-bot does the same at its place. This state comes before working and unknown. |
 | The status is unknown | Inconclusive signal or unavailable source | The character stops and turns grey, with a “?” bubble. |
-| A stuck subagent is **dismissed** | **User action** on an instance in the unknown state | A “!” bubble, then it stands up, turns to face you, and a cardboard box pops up in its hands in a puff of dust, with a plant and a red mug sticking out. With a sweat drop, it hurries (and hops) to the doormat and out the door. A mini-bot is gone for good. An agent's character stays grey until it's outside, then walks back in empty-handed, in color, has a coffee and resumes its idle routine. |
+| A lost subagent is **dismissed** | **User action** on a lost instance (see below) | A “!” bubble, then it stands up, turns to face you, and a cardboard box pops up in its hands in a puff of dust, with a plant and a red mug sticking out. With a sweat drop, it hurries (and hops) to the doormat and out the door. A mini-bot is gone for good. An agent's character stays grey until it's outside, then walks back in empty-handed, in color, has a coffee and resumes its idle routine. |
 
 Bubbles are always drawn on top of everything else. A character sitting on the side of a meeting table is drawn in front of the table.
 
@@ -54,12 +55,20 @@ Click a character: it stops and turns to face you, and a card shows its name wit
 
 The file path stays in the extension: the view only sends back the agent's identifier, and only a file found during discovery can be opened.
 
-## Dismissing a stuck subagent
+## Dismissing a lost subagent
 
 A subagent that is interrupted (`Esc`, an error, a session that moves on) may never be marked `finished`. It then stays “working”, then “unknown” after `subagentSilenceMinutes` of silence, until it expires after 6 hours of silence. Subagents run inside their session's Claude Code process, so there is nothing to stop on their own: the office only offers to **hide** them.
 
-- **When**: the card shows **Dismiss from office** on a mini-bot in the unknown state, and **Dismiss stuck run** (or *Dismiss N stuck runs*) on a character whose unknown state comes only from silent subagent instances (`AgentStatus.stuckRuns`). An unknown main session, an unavailable source or an active instance never offer it.
-- **How**: the view sends `{ type: 'dismiss', ids }` with the instance identifiers (`<sessionId>/<subagent file>`, also carried by each subagent signal as `runId`). `OfficeEngine.dismiss` only accepts identifiers that were in the unknown state at the last refresh, then refreshes at once. `state/dismiss.ts` removes those instances' signals and mini-bots from every following report, so the status bar, the legend and the office agree.
+A silent subagent isn't always lost, so the session's status decides:
+
+| Session status | Silent subagent | Can be dismissed |
+|---|---|---|
+| `waiting` (a permission or a question for you) | **waiting for you** (after 30 s of silence) | Never |
+| `busy` (a long command may be running) | **unknown** after `subagentSilenceMinutes` | No |
+| `idle` (control handed back to you, nothing pending) | **unknown** after `subagentSilenceMinutes`, flagged `stuck` | Yes |
+
+- **When**: the card shows **Dismiss from office** on a lost mini-bot (`Helper.stuck`), and **Dismiss stuck run** (or *Dismiss N stuck runs*) on a character whose unknown state comes only from lost instances (`AgentStatus.stuckRuns`). An unknown main session, an unavailable source, a working or waiting instance never offer it.
+- **How**: the view sends `{ type: 'dismiss', ids }` with the instance identifiers (`<sessionId>/<subagent file>`, also carried by each subagent signal as `runId`). `OfficeEngine.dismiss` only accepts identifiers that were lost at the last refresh, then refreshes at once. `state/dismiss.ts` removes those instances' signals and mini-bots from every following report, so the status bar, the legend and the office agree.
 - **How long**: in memory, per engine (VS Code window or desktop window). An instance is forgotten once it leaves the report (finished or expired), and a dismissed instance reappears after a restart if it is still in the report.
 - Claude Code is never touched: no file is written, no process is signalled.
 
@@ -78,14 +87,14 @@ A **Claude** character is added for Claude Code sessions started without `--agen
 
 All of these are read-only, and the extension never starts a process.
 
-1. **Session registry** `~/.claude/sessions/<pid>.json`, maintained by Claude Code: `pid`, `sessionId`, `cwd`, `status` (`busy` / `idle`).
+1. **Session registry** `~/.claude/sessions/<pid>.json`, maintained by Claude Code: `pid`, `sessionId`, `cwd`, `status` (`busy` / `idle` / `waiting`, with a `waitingFor` detail).
    - A session is alive if its process still exists (`process.kill(pid, 0)`, which only checks that it exists).
    - A session whose process is gone is expired and ignored.
    - **Scope** (`agentOffice.sessionScope`, `project` by default): only the sessions whose `cwd` is one of the project folders or inside one are read. The project folders are the folders open in the VS Code window, or the desktop window's working folder plus `projectFolders`. Folder symlinks are resolved, and the comparison ignores case on macOS and Windows. A session without `cwd` is skipped. With no project folder, or with `all`, every session is read. Agent definitions are not affected: `~/.claude/agents` and the project's `.claude/agents` are always shown.
 2. **Main agent** of a session (for example `claude --agent product-manager`): the `agent` field of the registry, otherwise the `{"type":"agent-setting","agentSetting":"<name>"}` entry in the first 64 KB of the transcript.
    - A session with neither is a conversation with Claude itself: it is attributed to the **Claude** character, and its model is the last `"model":"claude-…"` field in the final 64 KB of the transcript, shown as e.g. “Opus 5.5”. The transcript is only re-read when it changes.
    - Nothing else is read from the transcript.
-   - `busy` → **working**; `idle` → **idle**; any other value → **unknown**.
+   - `busy` → **working**; `idle` → **idle**; `waiting` → **waiting for you**; any other value → **unknown**.
 3. **Subagents** `~/.claude/projects/<project>/<sessionId>/subagents/agent-*.meta.json` (`agentType`, `finished`, `spawnDepth`):
    - not finished → **working**;
    - silent for `agentOffice.subagentSilenceMinutes` (20 min by default) → **unknown**;
@@ -167,7 +176,7 @@ Example setting:
 - **Delegations at depth 2 or more** (a subagent launching another): their exact delegating agent can't be identified. These agents show as working, but without a visit or meeting scene.
 - **Main session without `--agent`**: shown as the **Claude** character. Several such sessions share that one character: it works as long as any of them is busy, and shows the model of the most recent one.
 - Grouping into a meeting assumes the subagents are launched less than 4 seconds apart. Beyond that, each one gets a visit.
-- An agent waiting for permission may stay “working” as long as its session is `busy`.
+- “Waiting for you” relies on the `waiting` session status, observed in Claude Code 2.1.3xx. Within a waiting session, the office can't tell which subagent asked: every subagent silent for 30 s shows as waiting.
 - Guessing a room from the description is a heuristic. When it gets it wrong, set `agentOffice.agentRooms`.
 
 ## Running the extension

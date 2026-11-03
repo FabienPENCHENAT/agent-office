@@ -8,7 +8,8 @@ import { ActivitySignal, Delegation, RuntimeReport, SubagentRun } from '../types
  *
  * Sources utilisées :
  *  1. `<claudeDir>/sessions/<pid>.json` : registre des sessions tenu par Claude Code
- *     (`pid`, `sessionId`, `cwd`, `status: "busy" | "idle"`, `updatedAt`, `agent?`).
+ *     (`pid`, `sessionId`, `cwd`, `status: "busy" | "idle" | "waiting"`, `updatedAt`, `agent?`).
+ *     `waiting` : la session attend une réponse de l'utilisateur (permission, question).
  *     Une session dont le processus n'existe plus est considérée comme expirée et ignorée.
  *  2. Agent principal d'une session : champ `agent` du registre, sinon l'entrée
  *     `{"type":"agent-setting","agentSetting":"<nom>"}` en tête du transcript.
@@ -24,6 +25,9 @@ import { ActivitySignal, Delegation, RuntimeReport, SubagentRun } from '../types
  * Aucun contenu de conversation n'est conservé ni transmis : seuls le nom d'agent,
  * l'état et un horodatage sortent de ce module.
  */
+
+/** Dans une session en attente, un sous-agent muet depuis ce délai est considéré comme attendant l'utilisateur. */
+const WAITING_QUIET_MS = 30_000;
 
 interface SubagentInfo {
   id: string;
@@ -288,7 +292,8 @@ export class ClaudeCodeAdapter {
     // Sans agent nommé, la session est celle de Claude lui-même (une fois le transcript lisible).
     const mainAgent = named ?? (sessionDir ? this.options.defaultAgent : undefined);
     if (mainAgent) {
-      const state = session.status === 'busy' ? 'active' : session.status === 'idle' ? 'idle' : 'unknown';
+      const state =
+        session.status === 'busy' ? 'active' : session.status === 'idle' ? 'idle' : session.status === 'waiting' ? 'waiting' : 'unknown';
       const model = !named && sessionDir ? await this.model(session.sessionId, sessionDir) : undefined;
       signals.push({
         runtime: 'claude-code',
@@ -304,13 +309,15 @@ export class ClaudeCodeAdapter {
       for (const sub of await this.subagents(dir)) {
         const runId = `${session.sessionId}/${sub.id}`;
         if (sub.signal) {
-          signals.push({ ...sub.signal, runId });
-          subagents.push({
-            id: runId,
-            agentType: sub.agentType,
-            state: sub.signal.state === 'unknown' ? 'unknown' : 'active',
-            startedAt: sub.startedAt,
-          });
+          // Session en attente de l'utilisateur : un sous-agent qui se tait attend sans doute la même réponse.
+          // Session au repos : la main est rendue à l'utilisateur, un sous-agent silencieux et non terminé est perdu.
+          // Session occupée : il peut s'agir d'une longue commande, on ne conclut pas.
+          const silent = sub.signal.state === 'unknown';
+          const waiting = session.status === 'waiting' && (silent || this.now() - sub.signal.observedAt > WAITING_QUIET_MS);
+          const state = waiting ? 'waiting' : silent ? 'unknown' : 'active';
+          const stuck = state === 'unknown' && session.status === 'idle';
+          signals.push({ ...sub.signal, state, runId, ...(stuck ? { stuck } : {}) });
+          subagents.push({ id: runId, agentType: sub.agentType, state, startedAt: sub.startedAt, ...(stuck ? { stuck } : {}) });
         }
         if (mainAgent && sub.depth === 1) {
           delegations.push({

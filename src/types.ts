@@ -25,14 +25,19 @@ export interface AgentDefinition {
 export interface ActivitySignal {
   runtime: RuntimeId;
   agentName: string;
-  /** active : travaille ; idle : vivant mais en attente ; unknown : signal présent mais non concluant. */
-  state: 'active' | 'idle' | 'unknown';
+  /**
+   * active : travaille ; idle : vivant, rien à faire ; waiting : attend une réponse de l'utilisateur (permission,
+   * question) ; unknown : signal présent mais non concluant.
+   */
+  state: 'active' | 'idle' | 'waiting' | 'unknown';
   /** Horodatage (ms) de la dernière mise à jour observée de ce signal. */
   observedAt: number;
   /** Modèle utilisé, sous forme lisible (ex. « Opus 5.5 »), quand il est connu. */
   model?: string;
   /** Instance de sous-agent qui émet ce signal (même identifiant que `SubagentRun.id`). */
   runId?: string;
+  /** Instance silencieuse d'une session rendue à l'utilisateur sans rien attendre : perdue, elle peut être retirée. */
+  stuck?: boolean;
 }
 
 /** Disponibilité de la source de signaux d'un runtime. */
@@ -62,8 +67,10 @@ export interface SubagentRun {
   /** Identifiant stable de l'instance : session + fichier du sous-agent. */
   id: string;
   agentType: string;
-  state: 'active' | 'unknown';
+  state: 'active' | 'waiting' | 'unknown';
   startedAt: number;
+  /** Voir `ActivitySignal.stuck`. */
+  stuck?: boolean;
 }
 
 export interface RuntimeReport {
@@ -74,7 +81,7 @@ export interface RuntimeReport {
   subagents?: SubagentRun[];
 }
 
-export type AgentState = 'active' | 'inactive' | 'unknown';
+export type AgentState = 'active' | 'waiting' | 'inactive' | 'unknown';
 
 export interface AgentStatus {
   id: string;
@@ -88,7 +95,7 @@ export interface AgentStatus {
   model?: string;
   /** Personnage « Claude » intégré, sans fichier de définition. */
   builtin?: boolean;
-  /** État inconnu dû seulement à des sous-agents silencieux : leurs instances, que l'utilisateur peut retirer du bureau. */
+  /** État inconnu dû seulement à des sous-agents perdus (`stuck`) : leurs instances, que l'utilisateur peut retirer du bureau. */
   stuckRuns?: string[];
 }
 
@@ -134,8 +141,10 @@ export interface Helper {
   id: string;
   /** Type du sous-agent (ex. « Explore »). */
   name: string;
-  state: 'active' | 'unknown';
+  state: 'active' | 'waiting' | 'unknown';
   startedAt: number;
+  /** Instance perdue, que l'utilisateur peut retirer du bureau. */
+  stuck?: boolean;
 }
 
 /** Instantané envoyé à la vue : rien d'autre que nom, état et heure. */

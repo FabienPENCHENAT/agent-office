@@ -54,7 +54,7 @@ export function buildSnapshot(
         embodied.add(agentId);
         continue;
       }
-      helpers.push({ id: run.id, name: run.agentType, state: run.state, startedAt: run.startedAt });
+      helpers.push({ id: run.id, name: run.agentType, state: run.state, startedAt: run.startedAt, ...(run.stuck ? { stuck: true } : {}) });
     }
   }
   helpers.sort((a, b) => a.startedAt - b.startedAt || a.id.localeCompare(b.id));

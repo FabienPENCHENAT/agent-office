@@ -468,30 +468,38 @@ test('standalone recents: most recent first, no duplicates, bounded, removable, 
   assert.deepEqual(readState(file), { recents: [] });
 });
 
-test('instances bloquées : seules les instances silencieuses d\'un agent inconnu peuvent être retirées', () => {
-  const sig = (agentName: string, state: 'active' | 'idle' | 'unknown', runId?: string) => ({
+test('instances perdues : seules les instances silencieuses d\'une session au repos peuvent être retirées', () => {
+  const sig = (agentName: string, state: 'active' | 'idle' | 'waiting' | 'unknown', runId?: string, stuck = false) => ({
     runtime: 'claude-code' as const,
     agentName,
     state,
     observedAt: NOW,
     ...(runId ? { runId } : {}),
+    ...(stuck ? { stuck } : {}),
   });
-  const [stuck, mixed, busy] = normalize(
-    [def('tech-lead'), def('pm'), def('qa')],
+  const [lost, mixed, busy, silent, asking] = normalize(
+    [def('tech-lead'), def('pm'), def('qa'), def('dev'), def('ux')],
     [
       okClaude([
-        sig('tech-lead', 'unknown', 's/a'),
-        sig('tech-lead', 'unknown', 's/b'),
-        sig('pm', 'unknown', 's/c'),
+        sig('tech-lead', 'unknown', 's/a', true),
+        sig('tech-lead', 'unknown', 's/b', true),
+        sig('pm', 'unknown', 's/c', true),
         sig('pm', 'unknown'), // session principale non concluante : rien à retirer
-        sig('qa', 'unknown', 's/d'),
+        sig('qa', 'unknown', 's/d', true),
         sig('qa', 'active', 's/e'),
+        sig('dev', 'unknown', 's/f'), // silencieux dans une session occupée : peut-être une longue commande
+        sig('ux', 'waiting', 's/g'),
+        sig('ux', 'active', 's/h'),
       ]),
     ],
   );
-  assert.deepEqual(stuck.stuckRuns, ['s/a', 's/b']);
+  assert.deepEqual(lost.stuckRuns, ['s/a', 's/b']);
   assert.equal(mixed.stuckRuns, undefined);
   assert.equal(busy.stuckRuns, undefined);
+  assert.equal(silent.stuckRuns, undefined);
+  // Attendre l'utilisateur prime sur tout le reste, et n'est jamais retirable.
+  assert.equal(asking.state, 'waiting');
+  assert.equal(asking.stuckRuns, undefined);
 
   const report: RuntimeReport = {
     ...okClaude([sig('tech-lead', 'unknown', 's/a'), sig('tech-lead', 'idle')]),
@@ -543,4 +551,38 @@ test('retirer du bureau : le moteur n\'accepte que des instances silencieuses et
   run('agent-a', 'tech-lead', 25 * 60_000);
   await engine.tick();
   assert.equal(lead()?.state, 'unknown');
+});
+
+test('attente de l\'utilisateur : session « waiting », sous-agents muets en attente, jamais retirables', async () => {
+  const { dir, proj, session } = claudeFixture();
+  session(100, 's-wait', 'waiting');
+  session(200, 's-busy', 'busy');
+  session(300, 's-idle', 'idle');
+  write(path.join(proj, 's-wait.jsonl'), '{"type":"agent-setting","agentSetting":"pm"}\n');
+  write(path.join(proj, 's-busy.jsonl'), '{"type":"user"}\n');
+  write(path.join(proj, 's-idle.jsonl'), '{"type":"user"}\n');
+  const sub = (sessionId: string, id: string, agentType: string, age: number) => {
+    write(path.join(proj, sessionId, 'subagents', `${id}.meta.json`), JSON.stringify({ agentType }), NOW - age);
+    write(path.join(proj, sessionId, 'subagents', `${id}.jsonl`), '{}', NOW - age);
+  };
+  sub('s-wait', 'agent-a', 'tech-lead', 2 * 60_000); // muet depuis 2 min : attend la réponse
+  sub('s-wait', 'agent-b', 'Explore', 5_000); // vient d'écrire : travaille encore
+  sub('s-busy', 'agent-c', 'qa', 30 * 60_000); // longue commande possible : inconnu, pas retirable
+  sub('s-idle', 'agent-d', 'ux', 30 * 60_000); // main rendue sans rien attendre : perdu
+  const adapter = new ClaudeCodeAdapter({ claudeDir: dir, subagentSilenceMs: 20 * 60_000, now: () => NOW, isPidAlive: () => true });
+  const report = await adapter.read();
+  const runs = Object.fromEntries((report.subagents ?? []).map((r) => [r.agentType, [r.state, !!r.stuck]]));
+  assert.deepEqual(runs, {
+    'tech-lead': ['waiting', false],
+    Explore: ['active', false],
+    qa: ['unknown', false],
+    ux: ['unknown', true],
+  });
+  assert.equal(report.signals.find((s) => s.agentName === 'pm')?.state, 'waiting');
+
+  const snap = buildSnapshot([def('pm'), def('dev')], [report], NOW);
+  assert.equal(snap.slots.find((s) => s.agent?.name === 'pm')?.agent?.state, 'waiting');
+  const sum = summarize(snap);
+  assert.equal(sum.kind, 'waiting');
+  assert.equal(sum.text, 'Waiting for you: pm, tech-lead');
 });
