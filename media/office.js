@@ -3,6 +3,8 @@
 //
 // Ce qui est réel : l'état actif / inactif / inconnu, et les délégations (lancement et fin d'un sous-agent).
 //  - Un agent actif rejoint son poste et travaille.
+//  - Un sous-agent sans personnage attitré est un mini-bot : il entre par le bout du couloir, s'installe
+//    à un bureau libre de l'open space (sinon par terre dans le couloir, dos au mur) et repart par le même chemin.
 //  - Une délégation qui démarre se traduit par une visite (un seul agent) ou une réunion (plusieurs).
 //  - Une délégation terminée se traduit par une remise de copie au délégant.
 // Ce qui est décoratif : le cycle de vie des agents inactifs (hamac, banc et bord du lac, discussions, promenades).
@@ -187,6 +189,14 @@
   const SNOWMAN_TILE = { x: 37, y: 24 };
   block({ ...SNOWMAN_TILE, w: 1, h: 1 });
 
+  /** Porte de droite, au bout du couloir (entre la petite salle et le coin détente) : entrée des mini-bots. */
+  const SIDE_DOOR = { x: COLS - 1, y: CORRIDOR.y1 };
+  /** Places par terre dans le couloir, dos au mur, pour les mini-bots quand aucun bureau n'est libre. */
+  const FLOOR_SPOTS = [33, 34, 26, 27, 21, 22, 14, 15, 8, 9, 38, 2, 3]
+    .map((x) => ({ tile: { x, y: CORRIDOR.y0 }, dir: 'down' }))
+    .filter((f) => free(f.tile.x, f.tile.y))
+    .map((f) => ({ ...f, key: `floor${f.tile.x},${f.tile.y}`, dir: /** @type {Dir} */ (f.dir), desk: false }));
+
   const seatKeys = new Set(Object.values(STATIONS).map((s) => `${s.seat.x},${s.seat.y}`));
   const officeSeatKeys = new Set(Object.values(STATIONS).filter((s) => s.kind === 'office').map((s) => `${s.seat.x},${s.seat.y}`));
   const inBigRoom = (/** @type {number} */ x, /** @type {number} */ y) => x <= ROOMS.big.x1 && y >= BIG_WALL;
@@ -207,6 +217,11 @@
   function findPath(/** @type {Tile} */ from, /** @type {Tile} */ to) {
     if (from.x === to.x && from.y === to.y) {
       return [];
+    }
+    if (from.x >= COLS) {
+      // Mini-bot encore derrière la porte de droite : il rentre d'abord dans le couloir.
+      const inside = { x: COLS - 1, y: from.y };
+      return [feet(inside), ...findPath(inside, to)];
     }
     const prev = new Int32Array(COLS * ROWS).fill(-1);
     const start = from.y * COLS + from.x;
@@ -289,6 +304,10 @@
 
   /** @type {Map<string, any>} personnages par identifiant d'agent */
   const people = new Map();
+  /** @type {Map<string, any>} mini-bots par identifiant d'instance de sous-agent */
+  const bots = new Map();
+  /** Sous-agents en cours au-delà des mini-bots représentés (ils attendent derrière la porte). */
+  let botOverflow = 0;
   /** @type {Map<string, string>} lieu de détente → agent qui l'occupe */
   const spotTaken = new Map();
   const seenStart = new Set();
@@ -386,6 +405,10 @@
   function startTask(/** @type {any} */ p, /** @type {any} */ task) {
     if (task.k === 'go') {
       p.path = findPath(tileOf(p), task.tile);
+    } else if (task.k === 'exit') {
+      // Le mini-bot passe la porte de droite et sort du plan.
+      const d = feet(SIDE_DOOR);
+      p.path = [d, { x: d.x + 2 * T, y: d.y }];
     }
   }
 
@@ -415,6 +438,13 @@
         return task.fn() || task.timeout <= 0;
       case 'call':
         task.fn();
+        return true;
+      case 'exit':
+        if (p.path.length) {
+          walk(p, dt);
+          return false;
+        }
+        p.gone = true;
         return true;
     }
     return true;
@@ -538,6 +568,106 @@
     a.tasks.push(...seq(ta, 'right', 'talkA', a));
     b.tasks.push(...seq(tb, 'left', 'talkB', b));
   }
+
+  // ======================================================================
+  // Mini-bots : sous-agents sans personnage attitré
+  // ======================================================================
+  /** Bureau occupé : son agent attitré n'est pas inactif (il y travaille, ou s'y est arrêté). */
+  const deskBusy = (/** @type {string} */ ws) => {
+    const a = occupant(ws);
+    return !!a && a.state !== 'idle';
+  };
+  /**
+   * Place libre pour un mini-bot : d'abord un bureau de l'open space sans agent attitré, puis celui d'un agent
+   * inactif, sinon par terre dans le couloir.
+   */
+  function claimSpot(/** @type {any} */ b) {
+    const taken = new Set([...bots.values()].filter((o) => o !== b && o.spot).map((o) => o.spot.key));
+    const open = Object.entries(STATIONS).filter(([ws, st]) => st.kind === 'open' && !taken.has(ws) && !deskBusy(ws));
+    const desk = open.find(([ws]) => !occupant(ws)) || open[0];
+    if (desk) {
+      return { key: desk[0], tile: desk[1].seat, dir: desk[1].dir, desk: true };
+    }
+    return FLOOR_SPOTS.find((f) => !taken.has(f.key)) || { ...FLOOR_SPOTS[0], key: b.id };
+  }
+  const botPose = (/** @type {any} */ spot) => (spot.desk ? 'type' : 'sit');
+
+  /** Comportement de base d'un mini-bot : rejoindre sa place et y travailler. */
+  function botBase(/** @type {any} */ b) {
+    const s = b.spot;
+    if (b.leaving || !s) {
+      return;
+    }
+    if (!atTile(b, s.tile)) {
+      b.tasks.push(go(s.tile, botPose(s), s.dir));
+      return;
+    }
+    b.pose = botPose(s);
+    b.dir = s.dir;
+    b.bubble = b.state === 'unknown' ? '?' : null;
+  }
+
+  function syncBots() {
+    const now = snapshot.generatedAt;
+    const seen = new Set();
+    for (const h of snapshot.helpers || []) {
+      seen.add(h.id);
+      let b = bots.get(h.id);
+      if (!b) {
+        const seed = hash(h.id);
+        b = {
+          id: h.id, name: h.name, seed, bot: true, x: 0, y: 0, path: [], tasks: [], cur: null, pose: 'stand', dir: 'left',
+          bubble: null, activity: null, flash: null, pair: null, state: h.state, spot: null, leaving: false, gone: false,
+          color: FALLBACK[hash(h.name) % FALLBACK.length],
+        };
+        bots.set(h.id, b);
+        b.spot = claimSpot(b);
+        if (reduced() || now - h.startedAt > 90_000) {
+          // Lancé avant l'ouverture du panneau : déjà installé.
+          Object.assign(b, feet(b.spot.tile));
+          b.pose = botPose(b.spot);
+          b.dir = b.spot.dir;
+        } else {
+          // Nouveau : il arrive de derrière la porte de droite.
+          const d = feet(SIDE_DOOR);
+          Object.assign(b, { x: d.x + 2 * T, y: d.y });
+        }
+      }
+      if (b.leaving) {
+        // Revenu dans la liste (un autre sous-agent a fini avant lui) : il fait demi-tour.
+        Object.assign(b, { leaving: false, spot: claimSpot(b), tasks: [], cur: null, path: [] });
+      }
+      b.state = h.state;
+      // L'agent attitré du bureau se remet au travail : le mini-bot lui laisse la place.
+      if (b.spot.desk && deskBusy(b.spot.key)) {
+        b.spot = claimSpot(b);
+      }
+    }
+    for (const b of bots.values()) {
+      if (seen.has(b.id) || b.leaving) {
+        continue;
+      }
+      // Sous-agent terminé : le mini-bot se lève et repart par la porte de droite.
+      if (focus && focus.p === b) {
+        unfocus();
+      }
+      b.leaving = true;
+      b.spot = null;
+      if (reduced()) {
+        bots.delete(b.id);
+        continue;
+      }
+      b.tasks = [go(SIDE_DOOR, 'stand'), { k: 'exit' }];
+      b.cur = null;
+      b.path = [];
+      b.bubble = null;
+    }
+    botOverflow = snapshot.helperOverflow || 0;
+  }
+
+  /** Un mini-bot actif est installé à ce poste (son écran s'allume). */
+  const botWorkingAt = (/** @type {string} */ ws) =>
+    [...bots.values()].some((b) => b.spot && b.spot.key === ws && b.state === 'active' && atTile(b, b.spot.tile));
 
   // ======================================================================
   // Scènes issues des délégations réelles
@@ -694,6 +824,7 @@
         people.delete(id);
       }
     }
+    syncBots();
     handleInteractions();
   }
 
@@ -729,6 +860,19 @@
       }
       p.placed = true;
     }
+    for (const b of bots.values()) {
+      if (b.leaving) {
+        bots.delete(b.id);
+        continue;
+      }
+      b.tasks = [];
+      b.cur = null;
+      b.path = [];
+      Object.assign(b, feet(b.spot.tile));
+      b.pose = botPose(b.spot);
+      b.dir = b.spot.dir;
+      b.bubble = b.state === 'unknown' ? '?' : null;
+    }
     if (focus) {
       lookAtViewer(focus.p);
     }
@@ -746,7 +890,7 @@
         runBrief(from, [...pend.targets]);
       }
     }
-    for (const p of people.values()) {
+    for (const p of [...people.values(), ...bots.values()]) {
       p.placed = false;
       if (p.flash) {
         p.flash.t -= dt;
@@ -762,7 +906,11 @@
         if (!p.cur) {
           p.cur = p.tasks.shift() || null;
           if (!p.cur) {
-            base(p);
+            if (p.bot) {
+              botBase(p);
+            } else {
+              base(p);
+            }
             p.cur = p.tasks.shift() || null;
             if (!p.cur) {
               break;
@@ -775,6 +923,11 @@
           continue;
         }
         break;
+      }
+    }
+    for (const b of bots.values()) {
+      if (b.gone) {
+        bots.delete(b.id);
       }
     }
   }
@@ -883,6 +1036,62 @@
     up: ['.oppppppppo.', '.oppo..oppo.'],
     side: ['..opppppppo.', '........okko'],
   };
+
+  // ---------- Mini-bots (sous-agents) : petits robots à chenilles, tête-écran sur un cou, caisse aux couleurs du type ----------
+  // « E » = yeux affichés sur l'écran, éteints pour cligner. Ligne « T » = chenilles, qui défilent en roulant.
+  const BOT_HEAD = {
+    down: ['.oooooooo.', 'oHHHHHHHHo', 'oHVVVVVVHo', 'oHVEVVEVHo', 'oHVVVVVVHo', '.oooooooo.', '....oo....'],
+    up: ['.oooooooo.', 'oHHHHHHHHo', 'oHHHHHHHHo', 'oHHHHHHHHo', 'oHHHHHHHHo', '.oooooooo.', '....oo....'],
+    side: ['.oooooooo.', 'oHHHHHHHHo', 'oHHHHVVVVo', 'oHHHHVVEVo', 'oHHHHVVVVo', '.oooooooo.', '....oo....'],
+  };
+  const BOT_BODY = {
+    down: ['oooooooooo', 'oBBBBBBBBo', 'oBDDDDDDBo', 'oBDcDDDDBo', 'oBBBBBBBBo', 'oooooooooo'],
+    up: ['oooooooooo', 'oBBBBBBBBo', 'oBBBBBBBBo', 'oBBBBBBBBo', 'oDDDDDDDDo', 'oooooooooo'],
+    side: ['.oooooooo.', '.oBBBBBBo.', '.oBBBBBDo.', '.oBBBBBDo.', '.oBBBBBBo.', '.oooooooo.'],
+  };
+  const BOT_TRACKS = [['oTtTtTtTto', '.oooooooo.'], ['otTtTtTtTo', '.oooooooo.']];
+
+  function botRows(/** @type {any} */ b, /** @type {number} */ t) {
+    const view = b.dir === 'left' || b.dir === 'right' ? 'side' : b.dir === 'up' ? 'up' : 'down';
+    // Clignement bref toutes les quelques secondes.
+    const blink = !reduced() && (t + (b.seed % 50) / 10) % 3.2 < 0.15;
+    const head = BOT_HEAD[view].map((r) => r.replace(/E/g, blink ? 'V' : 'e'));
+    const frame = b.pose === 'walk' && !reduced() ? Math.floor(t * 10 + b.seed) % 2 : 0;
+    return [...head, ...BOT_BODY[view], ...BOT_TRACKS[frame]];
+  }
+
+  function drawBot(/** @type {any} */ b, /** @type {number} */ t) {
+    const grey = b.state === 'unknown';
+    const working = !grey && !b.leaving && (b.pose === 'sit' || b.pose === 'type');
+    const accent = grey ? '#a3a9b8' : b.color;
+    // Le voyant de la caisse clignote pendant le travail.
+    const glow = working && !reduced() && Math.floor(t * 3 + b.seed) % 2 === 0;
+    const pal = {
+      o: O,
+      H: grey ? '#b4bac6' : '#8a93a6',
+      V: '#2f3a52',
+      e: grey ? '#8a93a6' : '#8ff0c8',
+      B: accent,
+      D: shade(accent, 0.75),
+      c: glow ? '#fff7c2' : '#e05a4f',
+      T: '#5a6274',
+      t: '#3a4152',
+    };
+    const rows = botRows(b, t);
+    const img = sprite(rows, pal, `bot|${rows.join('')}|${Object.values(pal).join('')}`, b.dir === 'left');
+    const x = Math.round(b.x) - 5;
+    const fy = Math.round(b.y);
+    // Au poste, le mini-bot est rapproché du bureau pour dépasser du dossier de la chaise.
+    const lift = b.pose === 'type' ? 4 : 0;
+    const y = fy - rows.length + 1 - lift;
+    ctx.fillStyle = 'rgba(43, 34, 54, 0.22)';
+    ctx.fillRect(x + 1, fy - 1, 8, 2);
+    ctx.drawImage(img, x, y);
+    b.hit = { x, y, w: 10, h: rows.length };
+    // Même bulle de travail que les agents tant que le sous-agent tourne.
+    const bubble = b.bubble || (b.state === 'active' && !b.leaving ? 'work' : null);
+    return bubble ? () => drawBubble(x + 4, y - 11, bubble, t) : null;
+  }
 
   function personRows(/** @type {any} */ p, /** @type {number} */ t) {
     const anim = !reduced();
@@ -1335,6 +1544,16 @@
     g.strokeStyle = O;
     g.lineWidth = 1;
     g.strokeRect(0.5, 0.5, W - 1, H - 1);
+    // Entrée des mini-bots au bout du couloir : un simple paillasson.
+    {
+      const y0 = CORRIDOR.y0 * T;
+      const h = (CORRIDOR.y1 - CORRIDOR.y0 + 1) * T;
+      px(W - 9, y0 + 2, 7, h - 4, '#9a6230', g);
+      px(W - 8, y0 + 3, 5, h - 6, '#c98a4b', g);
+      for (let y = y0 + 5; y < y0 + h - 4; y += 3) {
+        px(W - 8, y, 5, 1, '#b5793a', g);
+      }
+    }
   }
   drawStatic();
 
@@ -1430,7 +1649,7 @@
         base: (s.desk.y + s.desk.h) * T,
         draw: (t) => {
           const a = occupant(id);
-          const active = !!(a && a.state === 'active');
+          const active = !!(a && a.state === 'active') || botWorkingAt(id);
           const mine = ownerColor(id);
           box(dx, dy, 32, 12, C.desk, C.white);
           box(dx, dy + 11, 32, 5, C.deskEdge);
@@ -1800,6 +2019,15 @@
     ctx.drawImage(sprite(SNOWMAN, SNOWMAN_PAL, 'snowman'), x - 1, y - SNOWMAN.length);
   });
 
+  /** Chiffres de 3 × 5 pixels pour la pancarte de la porte de droite. */
+  /** @type {Record<string, string[]>} */
+  const GLYPHS = {
+    '+': ['000', '010', '111', '010', '000'], 0: ['111', '101', '101', '101', '111'], 1: ['010', '110', '010', '010', '111'],
+    2: ['111', '001', '111', '100', '111'], 3: ['111', '001', '011', '001', '111'], 4: ['101', '101', '111', '001', '001'],
+    5: ['111', '100', '111', '001', '111'], 6: ['111', '100', '111', '101', '111'], 7: ['111', '001', '010', '010', '010'],
+    8: ['111', '101', '111', '101', '111'], 9: ['111', '101', '111', '001', '111'],
+  };
+
   function draw(/** @type {number} */ t) {
     ctx.drawImage(bg, 0, 0);
     if (christmas) {
@@ -1822,6 +2050,15 @@
           },
         };
       }),
+      ...[...bots.values()].map((b) => ({
+        base: b.y,
+        draw: (/** @type {number} */ tt) => {
+          const bb = drawBot(b, tt);
+          if (bb) {
+            bubbles.push(bb);
+          }
+        },
+      })),
     ];
     items.sort((a, b) => a.base - b.base);
     for (const it of items) {
@@ -1829,6 +2066,23 @@
     }
     if (christmas) {
       drawChristmasFront(t);
+    }
+    if (botOverflow > 0) {
+      // Sous-agents en attente derrière la porte de droite : pancarte « +N » sur le mur, au-dessus de la porte.
+      const label = `+${Math.min(botOverflow, 99)}`;
+      const w = 3 + label.length * 4;
+      const bx = W - w - 1;
+      const by = TOP_WALL * T - 1;
+      box(bx, by, w, 9, C.white);
+      [...label].forEach((ch, i) => {
+        GLYPHS[ch].forEach((row, y) => {
+          for (let x = 0; x < 3; x++) {
+            if (row[x] === '1') {
+              px(bx + 2 + i * 4 + x, by + 2 + y, 1, 1, O);
+            }
+          }
+        });
+      });
     }
     for (const b of bubbles) {
       b();
@@ -1889,7 +2143,7 @@
   /** Personnage sous le point (en pixels de la scène), le plus en avant s'ils se chevauchent. */
   function personAt(/** @type {number} */ x, /** @type {number} */ y) {
     let found = null;
-    for (const p of people.values()) {
+    for (const p of [...people.values(), ...bots.values()]) {
       const h = p.hit;
       if (h && x >= h.x - 1 && x <= h.x + h.w + 1 && y >= h.y - 1 && y <= h.y + h.h + 1 && (!found || p.y > found.y)) {
         found = p;
@@ -1919,9 +2173,10 @@
       focus = { p, dir: p.dir };
       lookAtViewer(p);
       // Le personnage « Claude » n'a pas de fichier de définition : la carte ne montre que son nom et son modèle.
-      cardName.textContent = p.model ? `${p.name} · ${p.model}` : p.name;
-      cardOpen.hidden = p.builtin;
-      cardHint.hidden = p.builtin;
+      cardName.textContent = p.bot ? `${p.name} · subagent` : p.model ? `${p.name} · ${p.model}` : p.name;
+      // Le personnage « Claude » et les mini-bots n'ont pas de fichier à ouvrir.
+      cardOpen.hidden = p.builtin || p.bot;
+      cardHint.hidden = p.builtin || p.bot;
       card.hidden = false;
       placeCard();
     }
@@ -2018,6 +2273,12 @@
       const desc = snapshot.overflow.map((/** @type {any} */ a) => `${a.name} (${stateLabel(a.state)})`).join(', ');
       lines.push(`${snapshot.overflow.length} more agent(s) found beyond the ten desks: ${desc}.`);
     }
+    const helpers = snapshot.helpers || [];
+    if (helpers.length) {
+      const names = helpers.map((/** @type {any} */ h) => h.name + (h.state === 'unknown' ? ' (unknown)' : '')).join(', ');
+      const waiting = snapshot.helperOverflow ? ` ${snapshot.helperOverflow} more waiting behind the door.` : '';
+      lines.push(`${helpers.length} subagent(s) at work as mini-bots: ${names}.${waiting}`);
+    }
     for (const h of snapshot.health) {
       if (h.message) {
         lines.push(h.message);
@@ -2027,7 +2288,7 @@
       lines.push(n);
     }
     lines.push(
-      `Last update: ${fmtTime(snapshot.generatedAt)}. Working at a desk, visits, meetings and hand-ins reflect real signals (status and delegations); the hammock, the pond and chats are just for fun.`,
+      `Last update: ${fmtTime(snapshot.generatedAt)}. Working at a desk, mini-bots, visits, meetings and hand-ins reflect real signals (status, subagents and delegations); the hammock, the pond and chats are just for fun.`,
     );
     footer.replaceChildren(
       ...lines.map((l) => {
