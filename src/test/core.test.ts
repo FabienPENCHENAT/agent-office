@@ -116,6 +116,49 @@ test('Claude Code : sous-agents non terminés actifs, terminés ignorés, silenc
   const report = await adapter.read();
   const states = Object.fromEntries(report.signals.map((s) => [s.agentName, s.state]));
   assert.deepEqual(states, { 'tech-lead': 'active', 'ux-ui-designer': 'unknown' });
+  // Une instance par sous-agent non terminé et non expiré, pour les mini-bots.
+  const runs = (report.subagents ?? []).map((r) => [r.id, r.agentType, r.state]).sort();
+  assert.deepEqual(runs, [
+    ['s1/agent-a', 'tech-lead', 'active'],
+    ['s1/agent-c', 'ux-ui-designer', 'unknown'],
+  ]);
+});
+
+test('mini-bots : sous-agents sans personnage, instances en plus, plafond et résumé', () => {
+  const run = (id: string, agentType: string, startedAt: number, state: 'active' | 'unknown' = 'active') => ({
+    id,
+    agentType,
+    state,
+    startedAt,
+  });
+  const report: RuntimeReport = {
+    ...okClaude([{ runtime: 'claude-code', agentName: 'tech-lead', state: 'active', observedAt: NOW }]),
+    subagents: [
+      run('s/b', 'tech-lead', NOW - 2_000),
+      run('s/a', 'tech-lead', NOW - 5_000),
+      run('s/c', 'Explore', NOW - 1_000, 'unknown'),
+    ],
+  };
+  const snap = buildSnapshot([def('tech-lead')], [report], NOW);
+  // La première instance de tech-lead est son personnage ; la seconde et l'agent intégré sont des mini-bots.
+  assert.deepEqual(snap.helpers.map((h) => [h.id, h.name, h.state]), [
+    ['s/b', 'tech-lead', 'active'],
+    ['s/c', 'Explore', 'unknown'],
+  ]);
+  assert.equal(snap.helperOverflow, 0);
+  assert.equal(summarize(snap).text, 'Active agent: tech-lead + 2 subagents');
+
+  const crowd: RuntimeReport = {
+    ...okClaude(),
+    subagents: Array.from({ length: 11 }, (_, i) => run(`s/${i}`, 'general-purpose', NOW - 20_000 + i)),
+  };
+  const full = buildSnapshot([def('pm')], [crowd], NOW);
+  assert.equal(full.helpers.length, 8);
+  assert.equal(full.helpers[0].id, 's/0'); // les plus anciens restent dans le bureau
+  assert.equal(full.helperOverflow, 3);
+  const sum = summarize(full);
+  assert.equal(sum.kind, 'active');
+  assert.equal(sum.text, '11 subagents working');
 });
 
 test('Claude par défaut : session sans agent → « Claude » avec son modèle, et ses délégations', async () => {

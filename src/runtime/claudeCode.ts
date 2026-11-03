@@ -1,7 +1,7 @@
 import type { Stats } from 'fs';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { ActivitySignal, Delegation, RuntimeReport } from '../types';
+import { ActivitySignal, Delegation, RuntimeReport, SubagentRun } from '../types';
 
 /**
  * Adaptateur Claude Code — strictement en lecture seule.
@@ -14,6 +14,7 @@ import { ActivitySignal, Delegation, RuntimeReport } from '../types';
  *     `{"type":"agent-setting","agentSetting":"<nom>"}` en tête du transcript.
  *  3. Sous-agents : `<claudeDir>/projects/<projet>/<sessionId>/subagents/agent-*.meta.json`
  *     (`agentType`, `finished`, `spawnDepth`). Un sous-agent non terminé d'une session vivante est actif.
+ *     Chaque sous-agent non terminé est aussi remonté comme instance (`subagents`), pour les mini-bots.
  *  4. Délégations : un sous-agent de profondeur 1 a été lancé par l'agent principal de sa session.
  *     Lancement = création du transcript du sous-agent ; fin = écriture de `finished: true`.
  *  5. Session sans agent principal : attribuée à `defaultAgent` (le personnage « Claude ») s'il est fourni,
@@ -186,6 +187,7 @@ export class ClaudeCodeAdapter {
     const isAlive = this.options.isPidAlive ?? defaultIsPidAlive;
     const signals: ActivitySignal[] = [];
     const delegations: Delegation[] = [];
+    const subagents: SubagentRun[] = [];
     let unreadable = 0;
     const liveIds = new Set<string>();
 
@@ -211,6 +213,7 @@ export class ClaudeCodeAdapter {
       const result = await this.sessionSignals(session);
       signals.push(...result.signals);
       delegations.push(...result.delegations);
+      subagents.push(...result.subagents);
     }
 
     for (const key of [...this.agentSettingCache.keys()]) {
@@ -229,14 +232,16 @@ export class ClaudeCodeAdapter {
       },
       signals,
       delegations,
+      subagents,
     };
   }
 
   private async sessionSignals(
     session: SessionRecord,
-  ): Promise<{ signals: ActivitySignal[]; delegations: Delegation[] }> {
+  ): Promise<{ signals: ActivitySignal[]; delegations: Delegation[]; subagents: SubagentRun[] }> {
     const signals: ActivitySignal[] = [];
     const delegations: Delegation[] = [];
+    const subagents: SubagentRun[] = [];
     const projectsDir = path.join(this.options.claudeDir, 'projects');
     let sessionDir = this.sessionDirCache.get(session.sessionId);
     if (!sessionDir) {
@@ -266,6 +271,12 @@ export class ClaudeCodeAdapter {
       for (const sub of await this.subagents(dir)) {
         if (sub.signal) {
           signals.push(sub.signal);
+          subagents.push({
+            id: `${session.sessionId}/${sub.id}`,
+            agentType: sub.agentType,
+            state: sub.signal.state === 'unknown' ? 'unknown' : 'active',
+            startedAt: sub.startedAt,
+          });
         }
         if (mainAgent && sub.depth === 1) {
           delegations.push({
@@ -279,7 +290,7 @@ export class ClaudeCodeAdapter {
         }
       }
     }
-    return { signals, delegations };
+    return { signals, delegations, subagents };
   }
 
   private async mainAgent(session: SessionRecord, sessionDir: string | undefined): Promise<string | undefined> {

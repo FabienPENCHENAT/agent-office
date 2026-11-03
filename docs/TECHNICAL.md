@@ -76,6 +76,7 @@ All of these are read-only, and the extension never starts a process.
    - not finished → **working**;
    - silent for `agentOffice.subagentSilenceMinutes` (20 min by default) → **unknown**;
    - silent for more than 6 hours → expired.
+   - Each running instance is also reported on its own. The first instance of an agent shown in the office is its character; every other instance becomes a mini-bot, oldest first. Only the subagent type is sent to the view, never its prompt.
 4. **Delegations**: a depth-1 subagent was launched by the main agent of its session.
    - Launch: creation date of the subagent's transcript.
    - Finish: date `finished: true` was written.

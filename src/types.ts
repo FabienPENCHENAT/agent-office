@@ -55,10 +55,21 @@ export interface Delegation {
   finishedAt?: number;
 }
 
+/** Sous-agent en cours d'exécution (une instance), quel que soit son type. */
+export interface SubagentRun {
+  /** Identifiant stable de l'instance : session + fichier du sous-agent. */
+  id: string;
+  agentType: string;
+  state: 'active' | 'unknown';
+  startedAt: number;
+}
+
 export interface RuntimeReport {
   health: RuntimeHealth;
   signals: ActivitySignal[];
   delegations?: Delegation[];
+  /** Sous-agents non terminés, un par instance. */
+  subagents?: SubagentRun[];
 }
 
 export type AgentState = 'active' | 'inactive' | 'unknown';
@@ -111,6 +122,18 @@ export interface Interaction {
   finishedAt?: number;
 }
 
+/**
+ * Sous-agent sans personnage attitré (agent intégré, ou instance en plus d'un agent déjà au travail) :
+ * représenté par un mini-bot qui entre par la porte du couloir et s'installe où il y a de la place.
+ */
+export interface Helper {
+  id: string;
+  /** Type du sous-agent (ex. « Explore »). */
+  name: string;
+  state: 'active' | 'unknown';
+  startedAt: number;
+}
+
 /** Instantané envoyé à la vue : rien d'autre que nom, état et heure. */
 export interface OfficeSnapshot {
   slots: Slot[];
@@ -122,7 +145,13 @@ export interface OfficeSnapshot {
   notices: string[];
   /** Délégations récentes ou en cours entre agents représentés. */
   interactions: Interaction[];
+  /** Mini-bots des sous-agents en cours, les plus anciens d'abord. */
+  helpers: Helper[];
+  /** Sous-agents en cours au-delà des mini-bots représentés. */
+  helperOverflow: number;
   generatedAt: number;
 }
 
 export const SLOT_COUNT = 10;
+/** Nombre maximal de mini-bots dans le bureau. */
+export const HELPER_COUNT = 8;
