@@ -36,8 +36,6 @@ export interface ActivitySignal {
   model?: string;
   /** Instance de sous-agent qui émet ce signal (même identifiant que `SubagentRun.id`). */
   runId?: string;
-  /** Instance silencieuse d'une session rendue à l'utilisateur sans rien attendre : perdue, elle peut être retirée. */
-  stuck?: boolean;
 }
 
 /** Disponibilité de la source de signaux d'un runtime. */
@@ -69,8 +67,6 @@ export interface SubagentRun {
   agentType: string;
   state: 'active' | 'waiting' | 'unknown';
   startedAt: number;
-  /** Voir `ActivitySignal.stuck`. */
-  stuck?: boolean;
 }
 
 export interface RuntimeReport {
@@ -95,8 +91,8 @@ export interface AgentStatus {
   model?: string;
   /** Personnage « Claude » intégré, sans fichier de définition. */
   builtin?: boolean;
-  /** État inconnu dû seulement à des sous-agents perdus (`stuck`) : leurs instances, que l'utilisateur peut retirer du bureau. */
-  stuckRuns?: string[];
+  /** Instances de sous-agents de cet agent que l'utilisateur peut retirer du bureau (jamais quand il attend une réponse). */
+  dismissableRuns?: string[];
 }
 
 /** Postes de travail du bureau : trois bureaux individuels et l'open space engineering. */
@@ -143,8 +139,6 @@ export interface Helper {
   name: string;
   state: 'active' | 'waiting' | 'unknown';
   startedAt: number;
-  /** Instance perdue, que l'utilisateur peut retirer du bureau. */
-  stuck?: boolean;
 }
 
 /** Instantané envoyé à la vue : rien d'autre que nom, état et heure. */

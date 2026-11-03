@@ -310,14 +310,11 @@ export class ClaudeCodeAdapter {
         const runId = `${session.sessionId}/${sub.id}`;
         if (sub.signal) {
           // Session en attente de l'utilisateur : un sous-agent qui se tait attend sans doute la même réponse.
-          // Session au repos : la main est rendue à l'utilisateur, un sous-agent silencieux et non terminé est perdu.
-          // Session occupée : il peut s'agir d'une longue commande, on ne conclut pas.
           const silent = sub.signal.state === 'unknown';
           const waiting = session.status === 'waiting' && (silent || this.now() - sub.signal.observedAt > WAITING_QUIET_MS);
           const state = waiting ? 'waiting' : silent ? 'unknown' : 'active';
-          const stuck = state === 'unknown' && session.status === 'idle';
-          signals.push({ ...sub.signal, state, runId, ...(stuck ? { stuck } : {}) });
-          subagents.push({ id: runId, agentType: sub.agentType, state, startedAt: sub.startedAt, ...(stuck ? { stuck } : {}) });
+          signals.push({ ...sub.signal, state, runId });
+          subagents.push({ id: runId, agentType: sub.agentType, state, startedAt: sub.startedAt });
         }
         if (mainAgent && sub.depth === 1) {
           delegations.push({

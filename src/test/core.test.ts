@@ -468,38 +468,32 @@ test('standalone recents: most recent first, no duplicates, bounded, removable, 
   assert.deepEqual(readState(file), { recents: [] });
 });
 
-test('instances perdues : seules les instances silencieuses d\'une session au repos peuvent être retirées', () => {
-  const sig = (agentName: string, state: 'active' | 'idle' | 'waiting' | 'unknown', runId?: string, stuck = false) => ({
+test('retirer du bureau : toute instance de sous-agent, sauf quand l\'agent attend une réponse', () => {
+  const sig = (agentName: string, state: 'active' | 'idle' | 'waiting' | 'unknown', runId?: string) => ({
     runtime: 'claude-code' as const,
     agentName,
     state,
     observedAt: NOW,
     ...(runId ? { runId } : {}),
-    ...(stuck ? { stuck } : {}),
   });
-  const [lost, mixed, busy, silent, asking] = normalize(
-    [def('tech-lead'), def('pm'), def('qa'), def('dev'), def('ux')],
+  const [lead, pm, qa, ux] = normalize(
+    [def('tech-lead'), def('pm'), def('qa'), def('ux')],
     [
       okClaude([
-        sig('tech-lead', 'unknown', 's/a', true),
-        sig('tech-lead', 'unknown', 's/b', true),
-        sig('pm', 'unknown', 's/c', true),
-        sig('pm', 'unknown'), // session principale non concluante : rien à retirer
-        sig('qa', 'unknown', 's/d', true),
-        sig('qa', 'active', 's/e'),
-        sig('dev', 'unknown', 's/f'), // silencieux dans une session occupée : peut-être une longue commande
+        sig('tech-lead', 'unknown', 's/a'),
+        sig('tech-lead', 'active', 's/b'),
+        sig('pm', 'active'), // session principale : rien à retirer
         sig('ux', 'waiting', 's/g'),
         sig('ux', 'active', 's/h'),
       ]),
     ],
   );
-  assert.deepEqual(lost.stuckRuns, ['s/a', 's/b']);
-  assert.equal(mixed.stuckRuns, undefined);
-  assert.equal(busy.stuckRuns, undefined);
-  assert.equal(silent.stuckRuns, undefined);
+  assert.deepEqual(lead.dismissableRuns, ['s/a', 's/b']);
+  assert.equal(pm.dismissableRuns, undefined);
+  assert.equal(qa.dismissableRuns, undefined);
   // Attendre l'utilisateur prime sur tout le reste, et n'est jamais retirable.
-  assert.equal(asking.state, 'waiting');
-  assert.equal(asking.stuckRuns, undefined);
+  assert.equal(ux.state, 'waiting');
+  assert.equal(ux.dismissableRuns, undefined);
 
   const report: RuntimeReport = {
     ...okClaude([sig('tech-lead', 'unknown', 's/a'), sig('tech-lead', 'idle')]),
@@ -511,11 +505,15 @@ test('instances perdues : seules les instances silencieuses d\'une session au re
   assert.equal(withoutDismissed(report, new Set()), report);
 });
 
-test('retirer du bureau : le moteur n\'accepte que des instances silencieuses et les oublie une fois finies', async () => {
+test('retirer du bureau : le moteur refuse les instances en attente et oublie celles qui finissent', async () => {
   const { dir, proj, session } = claudeFixture();
   const now = Date.now();
   session(process.pid, 's1', 'idle');
+  session(1, 's2', 'waiting'); // processus 1 (launchd / init) : toujours vivant
   write(path.join(proj, 's1.jsonl'), '{"type":"agent-setting","agentSetting":"pm"}\n');
+  write(path.join(proj, 's2.jsonl'), '{"type":"user"}\n');
+  write(path.join(proj, 's2', 'subagents', 'agent-w.meta.json'), JSON.stringify({ agentType: 'Plan' }), now - 60_000);
+  write(path.join(proj, 's2', 'subagents', 'agent-w.jsonl'), '{}', now - 60_000);
   write(path.join(dir, 'agents', 'pm.md'), '---\nname: pm\n---\n');
   write(path.join(dir, 'agents', 'tech-lead.md'), '---\nname: tech-lead\n---\n');
   const sub = path.join(proj, 's1', 'subagents');
@@ -537,13 +535,13 @@ test('retirer du bureau : le moteur n\'accepte que des instances silencieuses et
   await engine.tick();
   const lead = () => last?.snapshot.slots.find((s) => s.agent?.name === 'tech-lead')?.agent;
   assert.equal(lead()?.state, 'unknown');
-  assert.deepEqual(lead()?.stuckRuns, ['s1/agent-a']);
-  assert.deepEqual(last?.snapshot.helpers.map((h) => h.id).sort(), ['s1/agent-b', 's1/agent-c']);
+  assert.deepEqual(lead()?.dismissableRuns, ['s1/agent-a']);
+  assert.deepEqual(last?.snapshot.helpers.map((h) => h.id).sort(), ['s1/agent-b', 's1/agent-c', 's2/agent-w']);
 
-  // Une instance active, un identifiant inconnu ou une valeur invalide sont ignorés.
-  await engine.dismiss(['s1/agent-a', 's1/agent-b', 's1/agent-c', 's1/nope', 42]);
+  // Une instance qui attend l'utilisateur, un identifiant inconnu ou une valeur invalide sont ignorés.
+  await engine.dismiss(['s1/agent-a', 's1/agent-c', 's2/agent-w', 's1/nope', 42]);
   assert.equal(lead()?.state, 'inactive');
-  assert.deepEqual(last?.snapshot.helpers.map((h) => h.id), ['s1/agent-c']);
+  assert.deepEqual(last?.snapshot.helpers.map((h) => h.id).sort(), ['s1/agent-b', 's2/agent-w']);
 
   // L'instance retirée se termine puis redémarre sous le même nom : elle n'est plus masquée.
   run('agent-a', 'tech-lead', 30 * 60_000, true);
@@ -553,7 +551,7 @@ test('retirer du bureau : le moteur n\'accepte que des instances silencieuses et
   assert.equal(lead()?.state, 'unknown');
 });
 
-test('attente de l\'utilisateur : session « waiting », sous-agents muets en attente, jamais retirables', async () => {
+test('attente de l\'utilisateur : session « waiting », ses sous-agents muets sont en attente', async () => {
   const { dir, proj, session } = claudeFixture();
   session(100, 's-wait', 'waiting');
   session(200, 's-busy', 'busy');
@@ -567,17 +565,12 @@ test('attente de l\'utilisateur : session « waiting », sous-agents muets en at
   };
   sub('s-wait', 'agent-a', 'tech-lead', 2 * 60_000); // muet depuis 2 min : attend la réponse
   sub('s-wait', 'agent-b', 'Explore', 5_000); // vient d'écrire : travaille encore
-  sub('s-busy', 'agent-c', 'qa', 30 * 60_000); // longue commande possible : inconnu, pas retirable
-  sub('s-idle', 'agent-d', 'ux', 30 * 60_000); // main rendue sans rien attendre : perdu
+  sub('s-busy', 'agent-c', 'qa', 30 * 60_000); // silencieux ailleurs : inconnu
+  sub('s-idle', 'agent-d', 'ux', 30 * 60_000);
   const adapter = new ClaudeCodeAdapter({ claudeDir: dir, subagentSilenceMs: 20 * 60_000, now: () => NOW, isPidAlive: () => true });
   const report = await adapter.read();
-  const runs = Object.fromEntries((report.subagents ?? []).map((r) => [r.agentType, [r.state, !!r.stuck]]));
-  assert.deepEqual(runs, {
-    'tech-lead': ['waiting', false],
-    Explore: ['active', false],
-    qa: ['unknown', false],
-    ux: ['unknown', true],
-  });
+  const runs = Object.fromEntries((report.subagents ?? []).map((r) => [r.agentType, r.state]));
+  assert.deepEqual(runs, { 'tech-lead': 'waiting', Explore: 'active', qa: 'unknown', ux: 'unknown' });
   assert.equal(report.signals.find((s) => s.agentName === 'pm')?.state, 'waiting');
 
   const snap = buildSnapshot([def('pm'), def('dev')], [report], NOW);

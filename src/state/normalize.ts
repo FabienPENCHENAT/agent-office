@@ -25,12 +25,8 @@ export function normalize(definitions: AgentDefinition[], reports: RuntimeReport
     const relevant = signals.filter((s) => (state === 'active' || state === 'waiting' ? s.state === state : true));
     const recent = [...relevant].sort((a, b) => b.observedAt - a.observedAt);
     const model = recent.find((s) => s.model)?.model;
-    // Inconnu seulement à cause de sous-agents perdus : ces instances peuvent être retirées du bureau.
-    const unknown = signals.filter((s) => s.state === 'unknown');
-    const stuckRuns =
-      state === 'unknown' && report?.health.status === 'ok' && unknown.every((s) => s.runId && s.stuck)
-        ? unknown.map((s) => s.runId as string)
-        : [];
+    // Instances de sous-agents que l'utilisateur peut retirer du bureau, sauf quand l'agent attend sa réponse.
+    const dismissableRuns = state === 'waiting' ? [] : signals.flatMap((s) => (s.runId ? [s.runId] : []));
     return {
       id: def.id,
       name: def.name,
@@ -40,7 +36,7 @@ export function normalize(definitions: AgentDefinition[], reports: RuntimeReport
       updatedAt: recent[0]?.observedAt,
       ...(model ? { model } : {}),
       ...(def.builtin ? { builtin: true } : {}),
-      ...(stuckRuns.length ? { stuckRuns } : {}),
+      ...(dismissableRuns.length ? { dismissableRuns } : {}),
     };
   });
 }

@@ -8,7 +8,7 @@
 //  - Une délégation qui démarre se traduit par une visite (un seul agent) ou une réunion (plusieurs).
 //  - Une délégation terminée se traduit par une remise de copie au délégant.
 //  - Un agent qui attend une réponse de l'utilisateur (permission, question) s'assoit à son poste, main levée.
-//  - Une instance perdue retirée du bureau fait ses cartons et sort par la porte du couloir (un agent attitré revient
+//  - Une instance retirée du bureau par l'utilisateur fait ses cartons et sort par la porte du couloir (un agent attitré revient
 //    ensuite, les mains vides).
 // Ce qui est décoratif : le cycle de vie des agents inactifs (hamac, banc et bord du lac, discussions, promenades).
 (function () {
@@ -661,7 +661,6 @@
         Object.assign(b, { leaving: false, spot: claimSpot(b), tasks: [], cur: null, path: [] });
       }
       b.state = h.state;
-      b.stuck = !!h.stuck;
       // L'agent attitré du bureau se remet au travail : le mini-bot lui laisse la place.
       if (b.spot.desk && deskBusy(b.spot.key)) {
         b.spot = claimSpot(b);
@@ -781,7 +780,7 @@
   }
 
   /**
-   * Instance bloquée retirée du bureau : surprise, elle se lève, fait ses cartons et file par la porte du couloir.
+   * Instance retirée du bureau par l'utilisateur : surprise, elle se lève, fait ses cartons et file par la porte du couloir.
    * Un mini-bot ne revient pas ; un agent attitré revient les mains vides, en couleur, puis reprend sa routine.
    */
   function packUp(/** @type {any} */ p) {
@@ -886,7 +885,7 @@
       p.color = colors.get(a.id);
       p.builtin = !!a.builtin;
       p.model = a.model || null;
-      p.stuckRuns = a.stuckRuns || [];
+      p.dismissableRuns = a.dismissableRuns || [];
       if (p.state !== a.state) {
         p.state = a.state;
         clearLife(p); // le cycle de vie s'efface devant tout changement d'état réel
@@ -2248,9 +2247,9 @@
   cardWaiting.textContent = 'Waiting for your answer in Claude Code.';
   card.append(cardName, cardWaiting, cardOpen, cardHint, cardDismiss, cardDismissHint);
 
-  /** Instances bloquées que l'on peut retirer du bureau : le mini-bot silencieux lui-même, ou celles d'un agent. */
-  const stuckRunsOf = (/** @type {any} */ p) =>
-    p.bot ? (p.stuck && !p.leaving ? [p.id] : []) : p.packing ? [] : p.stuckRuns || [];
+  /** Instances que l'on peut retirer du bureau : le mini-bot lui-même, ou celles d'un agent ; jamais en attente de réponse. */
+  const dismissableOf = (/** @type {any} */ p) =>
+    p.state === 'waiting' || p.leaving || p.packing ? [] : p.bot ? [p.id] : p.dismissableRuns || [];
   scene.appendChild(card);
 
   // ======================================================================
@@ -2459,10 +2458,10 @@
       cardOpen.hidden = p.builtin || p.bot;
       cardHint.hidden = p.builtin || p.bot;
       cardWaiting.hidden = p.state !== 'waiting';
-      const stuck = stuckRunsOf(p);
-      cardDismiss.hidden = !stuck.length;
-      cardDismissHint.hidden = !stuck.length;
-      cardDismiss.textContent = p.bot ? 'Dismiss from office' : stuck.length > 1 ? `Dismiss ${stuck.length} stuck runs` : 'Dismiss stuck run';
+      const runs = dismissableOf(p);
+      cardDismiss.hidden = !runs.length;
+      cardDismissHint.hidden = !runs.length;
+      cardDismiss.textContent = p.bot ? 'Dismiss from office' : runs.length > 1 ? `Dismiss ${runs.length} subagent runs` : 'Dismiss subagent run';
       card.hidden = false;
       placeCard();
     }
@@ -2476,7 +2475,7 @@
   cardDismiss.addEventListener('click', () => {
     const p = focus && focus.p;
     unfocus();
-    const ids = p ? stuckRunsOf(p) : [];
+    const ids = p ? dismissableOf(p) : [];
     if (!p || !ids.length) {
       return;
     }
