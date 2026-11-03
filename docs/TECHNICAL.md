@@ -167,6 +167,15 @@ npm run compile
 
 Then open the **Agent Office** panel (at the bottom, next to the Terminal). You can also run *Agent Office: Show the agent office*, or click the status bar item.
 
+## Running the desktop app
+
+```bash
+npm run app        # compile, then start Electron on out/standalone/main.js
+npm run app:dist   # electron-builder: dmg + zip (macOS), nsis + portable (Windows) in dist/
+```
+
+The package `main` stays the VS Code extension; electron-builder overrides it with `out/standalone/main.js` (`build.extraMetadata`). The window loads `agent-office://app/` — a custom protocol serving the page and `media/` only — with a CSP that allows no network and no inline script. The renderer is the unchanged `media/office.js`: `media/standalone.js` provides `acquireVsCodeApi` on top of a `contextBridge` preload, and `media/standalone.css` supplies the `--vscode-*` theme variables (dark/light follow the system). Settings are read from `<userData>/settings.json` at startup and again whenever the file changes, so edits are picked up live. On macOS the app keeps running when its last window closes, like other Mac apps; clicking the Dock icon reopens the last folder. Each window owns one working folder and its own `OfficeEngine` (`projectDirs` = that folder + `projectFolders` from the settings); the recent folders live in `<userData>/state.json`. The page asks for folder changes over IPC (`chooseFolder`, `switchFolder`, `newWindow`, `removeRecent`), and the main process only accepts paths that are in the recent list or come from its own folder dialog.
+
 ## Checks
 
 ```bash
@@ -186,8 +195,14 @@ src/
   state/placement.ts             role (setting, name, description) → room and desk
   state/summary.ts               answer to “which agent is working?”
   state/snapshot.ts              minimal snapshot sent to the view
+  core/settings.ts               defaults and bounds for the settings (VS Code and desktop app)
+  core/engine.ts                 polling loop → snapshot, independent of VS Code
+  view/officePage.ts             page markup shared by the Webview and the desktop window
   view/officeHtml.ts             Webview page + CSP
-  extension.ts                   activation, polling, status bar, view
+  extension.ts                   VS Code: activation, status bar, view (uses core/engine)
+  standalone/main.ts             Electron main process: window, menu, protocol, settings watch
+  standalone/preload.ts          contextBridge between the page and the main process
+  standalone/store.ts            settings.json and recent folders (state.json) of the desktop app
 media/office.js                  office layout, pathfinding, idle routine, delegation scenes, colors, rendering
 media/office.css                 banner, accessible legend
 ```

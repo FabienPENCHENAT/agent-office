@@ -7,6 +7,11 @@
 
 * { box-sizing: border-box; }
 
+/* La place de la barre de défilement est toujours réservée. Sinon, à une hauteur de fenêtre proche de celle de la
+   page, la barre qui apparaît rétrécit la scène (dont la hauteur suit la largeur), la page tient de nouveau,
+   la barre disparaît, la scène regrandit… et la mise en page oscille sans fin. */
+html { scrollbar-gutter: stable; }
+
 body {
   margin: 0;
   padding: 8px 12px 12px;

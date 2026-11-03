@@ -1,30 +1,12 @@
-import * as os from 'os';
-import * as path from 'path';
 import * as vscode from 'vscode';
-import { DEFAULT_AGENT, definitionSources, discoverDefinitions, withDefaultAgent } from './discovery/agentDefinitions';
-import { ClaudeCodeAdapter } from './runtime/claudeCode';
-import { readCopilot } from './runtime/copilot';
-import { ChristmasDecor, christmasDecor } from './state/season';
-import { buildSnapshot } from './state/snapshot';
-import { summarize } from './state/summary';
-import { OfficeSnapshot, RuntimeReport } from './types';
+import { OfficeEngine, OfficeUpdate } from './core/engine';
+import { OfficeSettings, resolveSettings } from './core/settings';
 import { officeHtml } from './view/officeHtml';
 
 type ReduceMotion = 'on' | 'off' | 'auto';
 
-function config() {
-  const c = vscode.workspace.getConfiguration('agentOffice');
-  const claudeDir =
-    c.get<string>('claudeConfigDir')?.trim() || process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude');
-  return {
-    claudeDir,
-    pollMs: Math.max(1, c.get<number>('pollIntervalSeconds', 2)) * 1000,
-    silenceMs: Math.max(1, c.get<number>('subagentSilenceMinutes', 20)) * 60_000,
-    pinned: c.get<string[]>('pinnedAgents', []),
-    rooms: c.get<Record<string, string>>('agentRooms', {}),
-    showClaude: c.get<boolean>('showDefaultClaude', true),
-    christmas: c.get<ChristmasDecor>('christmasDecor', 'auto'),
-  };
+function config(): OfficeSettings {
+  return resolveSettings(vscode.workspace.getConfiguration('agentOffice') as unknown as Record<string, unknown>);
 }
 
 function reduceMotion(): ReduceMotion {
@@ -34,107 +16,53 @@ function reduceMotion(): ReduceMotion {
 
 class OfficeController implements vscode.WebviewViewProvider, vscode.Disposable {
   private view?: vscode.WebviewView;
-  private snapshot?: OfficeSnapshot;
-  /** Fichier .md de chaque agent découvert, par identifiant. Reste côté extension. */
-  private files = new Map<string, string>();
-  private timer?: NodeJS.Timeout;
-  private running = false;
-  private adapter: ClaudeCodeAdapter;
-  private adapterKey = '';
+  private readonly engine: OfficeEngine;
   private readonly statusBar: vscode.StatusBarItem;
 
   constructor(
     private readonly extensionUri: vscode.Uri,
     private readonly version: string,
   ) {
-    this.adapter = this.makeAdapter();
+    this.engine = new OfficeEngine({
+      settings: config,
+      projectDirs: () =>
+        (vscode.workspace.workspaceFolders ?? []).filter((f) => f.uri.scheme === 'file').map((f) => f.uri.fsPath),
+      onUpdate: (update) => this.render(update),
+    });
     this.statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 50);
     this.statusBar.command = 'agentOffice.show';
     this.statusBar.name = 'Agent Office';
     this.statusBar.show();
   }
 
-  private makeAdapter(): ClaudeCodeAdapter {
-    const c = config();
-    this.adapterKey = `${c.claudeDir}|${c.silenceMs}|${c.showClaude}`;
-    return new ClaudeCodeAdapter({
-      claudeDir: c.claudeDir,
-      subagentSilenceMs: c.silenceMs,
-      defaultAgent: c.showClaude ? DEFAULT_AGENT : undefined,
-    });
-  }
-
   start(): void {
-    this.stop();
-    void this.tick();
-    this.timer = setInterval(() => void this.tick(), config().pollMs);
+    this.engine.start();
   }
 
-  stop(): void {
-    if (this.timer) {
-      clearInterval(this.timer);
-      this.timer = undefined;
-    }
+  tick(): Promise<void> {
+    return this.engine.tick();
   }
 
   onConfigChanged(): void {
-    const c = config();
-    if (`${c.claudeDir}|${c.silenceMs}|${c.showClaude}` !== this.adapterKey) {
-      this.adapter = this.makeAdapter();
-    }
-    this.start();
+    this.engine.onSettingsChanged();
     this.postMotion();
   }
 
-  async tick(): Promise<void> {
-    if (this.running) {
+  private render(update: OfficeUpdate | undefined = this.engine.last): void {
+    if (!update) {
       return;
     }
-    this.running = true;
-    try {
-      const c = config();
-      const workspaceDirs = (vscode.workspace.workspaceFolders ?? [])
-        .filter((f) => f.uri.scheme === 'file')
-        .map((f) => f.uri.fsPath);
-      const discovery = await discoverDefinitions(definitionSources(c.claudeDir, os.homedir(), workspaceDirs));
-      this.files = new Map(discovery.definitions.flatMap((d) => (d.file ? [[d.id, d.file] as const] : [])));
-      let claude: RuntimeReport;
-      try {
-        claude = await this.adapter.read();
-      } catch (err) {
-        claude = { health: { runtime: 'claude-code', status: 'unavailable', message: String(err) }, signals: [] };
-      }
-      const notices = discovery.errors.map((e) => `Unreadable agents folder: ${e.dir} (${e.message})`);
-      const definitions = c.showClaude ? withDefaultAgent(discovery.definitions) : discovery.definitions;
-      this.snapshot = buildSnapshot(definitions, [claude, readCopilot()], Date.now(), {
-        pinned: c.pinned,
-        rooms: c.rooms,
-        notices,
-      });
-      this.render();
-    } finally {
-      this.running = false;
-    }
-  }
-
-  private render(): void {
-    if (!this.snapshot) {
-      return;
-    }
-    const summary = summarize(this.snapshot);
     const icon = { active: '$(pulse)', idle: '$(circle-outline)', unknown: '$(question)', empty: '$(circle-slash)' }[
-      summary.kind
+      update.summary.kind
     ];
-    this.statusBar.text = `${icon} ${summary.text}`;
+    this.statusBar.text = `${icon} ${update.summary.text}`;
     this.statusBar.tooltip = 'Agent Office — which agent is working right now? (click to open the office)';
-    // Réévalué à chaque relevé : le décor apparaît et disparaît seul aux dates prévues.
-    const christmas = christmasDecor(config().christmas, new Date());
-    void this.view?.webview.postMessage({ type: 'snapshot', snapshot: this.snapshot, summary, christmas });
+    void this.view?.webview.postMessage({ type: 'snapshot', ...update });
   }
 
   /** Ouvre la définition d'un agent. La vue ne donne qu'un identifiant : seul un fichier découvert peut être ouvert. */
   private async openAgent(id: unknown): Promise<void> {
-    const file = typeof id === 'string' ? this.files.get(id) : undefined;
+    const file = this.engine.fileOf(id);
     if (!file) {
       return;
     }
@@ -170,7 +98,7 @@ class OfficeController implements vscode.WebviewViewProvider, vscode.Disposable 
   }
 
   dispose(): void {
-    this.stop();
+    this.engine.stop();
     this.statusBar.dispose();
   }
 }
