@@ -154,13 +154,15 @@ The office also runs as a standalone desktop app (built with [Electron](https://
 
 <img src="docs/images/desktop.png" alt="The office in its own desktop window" width="640">
 
+Download it from the [latest release](../../releases/latest) (under *Assets*): the **`.dmg`** for macOS, or the **`Setup .exe`** (installer) or portable **`.exe`** for Windows.
+
 **Choose a working folder.** Your own agents (`~/.claude/agents`) always show up, but a project's agents (its `.claude/agents` folder) only appear once you pick that project, like opening a folder in VS Code. Use the **Folder** bar at the top of the window (or **File → Open Folder…**, `Cmd/Ctrl+O`):
 
 - Each window has its own folder. **New Window…** (`Cmd/Ctrl+N`, or ⧉ next to a recent folder) opens another folder side by side.
 - Visited folders are remembered. Click one in the **Folder** list to switch to it, or use **File → Open Recent** (`Cmd/Ctrl+1…9`). **✕** or **File → Remove from Recent List** forgets a folder (it is never deleted from disk), **Clear Recent List** forgets them all.
 - The last folder is reopened at the next launch, and the window title shows the folder and the working agent.
 
-From a clone (Node.js 18 or later):
+Or build it from a clone (Node.js 18 or later):
 
 ```bash
 npm install
@@ -168,7 +170,9 @@ npm run app            # compile and open the window
 npm run app:dist       # build an installer for this OS into dist/
 ```
 
-`npm run app:dist:mac` produces a `.dmg` and a `.zip`; `npm run app:dist:win` produces an installer and a portable `.exe`. Installers are not code-signed: macOS asks you to confirm the first launch (right-click → Open), and Windows SmartScreen shows a warning.
+`npm run app:dist:mac` produces a `.dmg` and a `.zip`; `npm run app:dist:win` produces an installer and a portable `.exe`. Pushing a `v*` tag that matches the `package.json` version builds these files and the `.vsix` on GitHub Actions and attaches them to the release.
+
+Installers are not code-signed. On macOS, the first launch is blocked: open *System Settings → Privacy & Security* and click *Open Anyway* (if macOS says the app is damaged, run `xattr -cr "/Applications/Agent Office.app"`). On Windows, SmartScreen shows a warning: click *More info → Run anyway*.
 
 | System | Status |
 |---|---|
