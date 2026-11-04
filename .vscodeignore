@@ -8,6 +8,7 @@ tsconfig.webview.json
 docs/**
 dist/**
 media/standalone.*
+media/dock/**
 out/standalone/**
 .github/**
 build/**

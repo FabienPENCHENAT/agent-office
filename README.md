@@ -155,7 +155,7 @@ code --install-extension ~/Downloads/agent-office-*.vsix
 
 #### Without VS Code
 
-The office also runs as a standalone desktop app (built with [Electron](https://www.electronjs.org/)). It opens in its own **window**, reads the same local files as the extension, and works next to any terminal or editor. The window title and, on macOS, the Dock badge show whether an agent is working.
+The office also runs as a standalone desktop app (built with [Electron](https://www.electronjs.org/)). It opens in its own **window**, reads the same local files as the extension, and works next to any terminal or editor. The window title and the app icon show whether an agent is working: in the Dock on macOS (for all windows), in the taskbar on Windows (for each window). The character works at its laptop, raises an orange “!” bubble when an agent waits for your answer, and dozes off in a dim office when nobody is working.
 
 <img src="docs/images/desktop.png" alt="The office in its own desktop window" width="640">
 
