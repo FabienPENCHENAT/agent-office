@@ -423,7 +423,10 @@ test('portée : dossier du projet et sous-dossiers, pas les dossiers voisins', (
   assert.equal(inScope('/work/app-2'), false);
   assert.equal(inScope('/work'), false);
   assert.equal(inScope(undefined), false);
-  assert.equal(cwdMatcher(['/work/app'], 'linux')('/WORK/app'), false);
+  // Sous Windows, Node compare les chemins sans tenir compte de la casse : ce cas Linux n'y est pas vérifiable.
+  if (process.platform !== 'win32') {
+    assert.equal(cwdMatcher(['/work/app'], 'linux')('/WORK/app'), false);
+  }
 });
 
 test('standalone settings file: missing, invalid, and project folders', () => {

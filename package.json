@@ -150,7 +150,7 @@
     "compile": "tsc -p .",
     "watch": "tsc -watch -p .",
     "lint": "tsc -p . --noEmit && tsc -p tsconfig.webview.json",
-    "test": "npm run compile && node --test out/test/*.test.js",
+    "test": "npm run compile && node --test \"out/test/*.test.js\"",
     "package": "npm run compile && npx --yes @vscode/vsce@3.2.1 package --no-dependencies",
     "app": "npm run compile && electron out/standalone/main.js",
     "app:dist": "npm run compile && electron-builder",
