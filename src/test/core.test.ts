@@ -516,7 +516,7 @@ test('retirer du bureau : le moteur n\'accepte que des instances grises et oubli
   const { dir, proj, session } = claudeFixture();
   const now = Date.now();
   session(process.pid, 's1', 'idle');
-  session(1, 's2', 'waiting'); // processus 1 (launchd / init) : toujours vivant
+  session(process.ppid, 's2', 'waiting'); // processus parent : vivant pendant le test, sur toutes les plateformes
   write(path.join(proj, 's1.jsonl'), '{"type":"agent-setting","agentSetting":"pm"}\n');
   write(path.join(proj, 's2.jsonl'), '{"type":"user"}\n');
   write(path.join(proj, 's2', 'subagents', 'agent-w.meta.json'), JSON.stringify({ agentType: 'Plan' }), now - 60_000);
